@@ -1497,8 +1497,7 @@ class GeneratorDialog:
     def __init__(self, app, parent, select=False):
         self.app, self.result = app, None
         top = self.top = _new_top(app, parent, "Генератор паролей")
-        frm = ttk.Frame(top, padding=24)
-        frm.pack()
+        frm = _scroll_dialog_body(top,24)
         self.out = tk.StringVar()
         ttk.Entry(frm, textvariable=self.out, width=44, font=("Consolas", 11)).grid(
             row=0, column=0, columnspan=3, sticky="we", pady=(0, 6))
@@ -1567,8 +1566,7 @@ class EntryDialog:
         is_new = not entry
         entry = entry or {}
         top = self.top = _new_top(app, parent, "Новая запись" if is_new else "Запись")
-        frm = ttk.Frame(top, padding=16)
-        frm.pack()
+        frm = _scroll_dialog_body(top,16)
         self.vars = {}
         r = 0
 
@@ -1796,8 +1794,7 @@ class SettingsDialog:
         s = app.settings
         self.app = app
         top = self.top = _new_top(app, parent, "Настройки")
-        frm = ttk.Frame(top, padding=20)
-        frm.pack()
+        frm = _scroll_dialog_body(top,20)
         self.idle = tk.IntVar(value=s.get("idle_minutes"))
         self.clip = tk.IntVar(value=s.get("clipboard_seconds"))
         self.hotkey = tk.StringVar(value=s.get("hotkey"))
