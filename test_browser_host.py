@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Мои пароли Pro — заполнение по разрешению",
+  "version": "4.0.0",
+  "description": "Однократное заполнение сохранённой записи по подтверждению в Windows.",
+  "permissions": ["activeTab", "nativeMessaging", "scripting"],
+  "action": {"default_popup": "popup.html", "default_title": "Мои пароли"}
+}

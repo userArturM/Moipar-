@@ -1,0 +1,31 @@
+import tempfile
+import unittest
+from pathlib import Path
+from tools.verify_windows_build import is_pe
+
+
+class BinaryVerifierTests(unittest.TestCase):
+    def test_rejects_fake_mz_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'fake.exe'
+            p.write_bytes(b'MZ' + b'\0' * 4096)
+            self.assertFalse(is_pe(p))
+
+    def test_accepts_minimal_pe_signature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sample.exe'
+            payload = bytearray(4096)
+            payload[:2] = b'MZ'
+            payload[0x3C:0x40] = (0x80).to_bytes(4, 'little')
+            payload[0x80:0x84] = b'PE\0\0'
+            p.write_bytes(payload)
+            self.assertTrue(is_pe(p))
+
+    def test_rejects_invalid_pe_offset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'bad.exe'
+            payload = bytearray(4096)
+            payload[:2] = b'MZ'
+            payload[0x3C:0x40] = (0xffffffff).to_bytes(4, 'little')
+            p.write_bytes(payload)
+            self.assertFalse(is_pe(p))
