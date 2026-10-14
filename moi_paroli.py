@@ -1275,14 +1275,14 @@ def start_tray(app):
 FF = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
 
-DARK = {"bg": "#0b1221", "side": "#101c32", "panel": "#142139", "card": "#1c2c48",
-        "fg": "#f3f7ff", "muted": "#9caeca", "accent": "#43b9ed", "accent_hi": "#70d3fb",
-        "accent_fg": "#08172c", "sel": "#23456d", "border": "#2d4262", "hover": "#243855",
-        "good": "#5be0b0", "warn": "#ffd076", "bad": "#ff8194"}
-LIGHT = {"bg": "#f1f4f8", "side": "#e8edf3", "panel": "#ffffff", "card": "#f5f7fa",
-         "fg": "#1c2733", "muted": "#667689", "accent": "#2f6fd0", "accent_hi": "#4a86e4",
-         "accent_fg": "#ffffff", "sel": "#dce8f8", "border": "#d0d9e4", "hover": "#e0e8f2",
-         "good": "#2e7d32", "warn": "#b26a00", "bad": "#b00020"}
+DARK = {"bg": "#101217", "side": "#171a21", "panel": "#1c2028", "card": "#242932",
+        "fg": "#edf1f7", "muted": "#a3adbc", "accent": "#8aa7ff", "accent_hi": "#acc0ff",
+        "accent_fg": "#10172b", "sel": "#303d60", "border": "#343b47", "hover": "#303743",
+        "good": "#79d6b0", "warn": "#ebc17c", "bad": "#f59ba6"}
+LIGHT = {"bg": "#f3f5f9", "side": "#e9edf5", "panel": "#ffffff", "card": "#f5f7fb",
+         "fg": "#202b40", "muted": "#5e6d85", "accent": "#465dd8", "accent_hi": "#576fe8",
+         "accent_fg": "#ffffff", "sel": "#e3e9ff", "border": "#d8dfeb", "hover": "#e9eef8",
+         "good": "#217557", "warn": "#966219", "bad": "#b64055"}
 THEMES = {"dark": DARK, "light": LIGHT}
 LEVEL_STYLE = {0: "Bad", 1: "Warn", 2: "Good", 3: "Good"}
 
@@ -2136,7 +2136,7 @@ class App:
         self._sync_at = 0.0
         geo = str(self.settings.get("geometry") or "")
         self.root.geometry(geo if re.fullmatch(r"\d+x\d+(?:[+-]-?\d+){0,2}", geo) else "1360x820")
-        self.root.minsize(1120, 640)
+        self.root.minsize(1240, 800)
         self.icon = self.logo = None
         try:
             self.icon = tk.PhotoImage(data=ICON_B64)
@@ -2189,6 +2189,10 @@ class App:
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
                     troughcolor=t["border"], focuscolor=t["accent"], font=(FF, 10))
         s.configure("TFrame", background=t["bg"])
+        s.configure("Section.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, 13, "bold"))
+        s.configure("DetailCaption.TLabel", background=t["panel"], foreground=t["muted"], font=(FF, 10))
+        s.configure("Compact.TButton", padding=(10, 5))
+        s.configure("Search.TEntry", padding=(12, 10), font=(FF, 11))
         s.configure("TLabel", background=t["bg"], foreground=t["fg"])
         for nm, col in (("Side", t["side"]), ("Panel", t["panel"]), ("Card", t["card"])):
             s.configure(f"{nm}.TFrame", background=col)
@@ -2198,14 +2202,14 @@ class App:
         s.configure("CardMuted.TLabel", background=t["card"], foreground=t["muted"], font=(FF, 9))
         s.configure("SideMuted.TLabel", background=t["side"], foreground=t["muted"], font=(FF, 9))
         s.configure("Title.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, 16, "bold"))
-        s.configure("Big.TLabel", background=t["card"], foreground=t["fg"], font=(FF, 20, "bold"))
+        s.configure("Big.TLabel", background=t["card"], foreground=t["fg"], font=(FF, 24, "bold"))
         s.configure("Brand.TLabel", background=t["side"], foreground=t["fg"], font=(FF, 15, "bold"))
-        s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, 22, "bold"))
+        s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, 26, "bold"))
         s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, 10))
         s.configure("SideHeading.TLabel", background=t["side"], foreground=t["muted"], font=(FF, 9, "bold"))
         s.configure("Mono.TLabel", background=t["panel"], foreground=t["fg"], font=(MONO, 11))
 
-        s.configure("TButton", padding=(12, 6), background=t["card"], foreground=t["fg"],
+        s.configure("TButton", padding=(14, 9), background=t["card"], foreground=t["fg"],
                     bordercolor=t["border"], relief="flat", focusthickness=0)
         s.map("TButton", background=[("active", t["hover"]), ("pressed", t["sel"])],
               bordercolor=[("focus", t["accent"])])
@@ -2222,13 +2226,13 @@ class App:
 
         s.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
         s.configure("Treeview", background=t["panel"], fieldbackground=t["panel"],
-                    foreground=t["fg"], rowheight=40, borderwidth=0, relief="flat")
+                    foreground=t["fg"], rowheight=48, borderwidth=0, relief="flat")
         s.map("Treeview", background=[("selected", t["sel"])], foreground=[("selected", t["fg"])])
         s.configure("Treeview.Heading", background=t["side"], foreground=t["muted"],
                     font=(FF, 9, "bold"), relief="flat", padding=(8, 8), borderwidth=0)
         s.map("Treeview.Heading", background=[("active", t["hover"])])
         s.configure("Side.Treeview", background=t["side"], fieldbackground=t["side"],
-                    rowheight=42)
+                    rowheight=44)
         s.map("Side.Treeview", background=[("selected", t["sel"])])
 
         for w in ("TEntry", "TCombobox", "TSpinbox"):
@@ -2666,14 +2670,17 @@ class App:
         t = self.t
         f = ttk.Frame(self.root)
         self._swap(f)
-        card = ttk.Frame(f, style="Panel.TFrame", padding=(46, 38))
+        ttk.Label(f, text="◈  Мои пароли", style="Hero.TLabel").place(x=40, y=32)
+        ttk.Label(f, text="Личное пространство для ваших доступов", style="HeroMuted.TLabel").place(x=42, y=80)
+        card = ttk.Frame(f, style="Panel.TFrame", padding=(48, 36))
         card.place(relx=0.5, rely=0.46, anchor="center")
         if self.icon:
             ttk.Label(card, image=self.icon, style="Panel.TLabel").pack()
-        ttk.Label(card, text=APP_NAME, style="Title.TLabel").pack(pady=(10, 0))
+        ttk.Label(card, text="Начнём с защиты" if new else "С возвращением", style="Title.TLabel").pack(pady=(10, 0))
         ttk.Label(card, text=("Создайте мастер-пароль для нового хранилища" if new
                               else "Введите мастер-пароль, чтобы открыть хранилище"),
                   style="Muted.TLabel").pack(pady=(4, 20))
+        ttk.Label(card, text="Мастер-пароль", style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
         pw1 = ttk.Entry(card, show="•", width=34, font=(FF, 11))
         pw1.pack(pady=4, fill="x")
         pw1.focus_set()
@@ -2850,34 +2857,25 @@ class App:
         f = ttk.Frame(self.root)
         self._swap(f)
 
-        head = ttk.Frame(f, style="Side.TFrame", padding=(24, 18))
+        head = ttk.Frame(f, style="Panel.TFrame", padding=(24, 14))
         head.pack(fill="x")
-        if self.logo:
-            ttk.Label(head, image=self.logo, style="Side.TLabel").pack(side="left")
-        ttk.Label(head, text="◈  МОИ ПАРОЛИ   PRO 4.0", style="Brand.TLabel").pack(side="left", padx=(8, 18))
-        for text, menu in (("Файл", self._file_menu()), ("Сервис", self._tools_menu()),
+        ttk.Label(head, text="◈  Мои пароли", style="Title.TLabel").pack(side="left", padx=(0, 24))
+        for text, menu in (("Файл", self._file_menu()), ("Инструменты", self._tools_menu()),
                            ("Справка", self._help_menu())):
-            ttk.Menubutton(head, text=text, menu=menu, style="Tool.TMenubutton").pack(side="left")
-        ttk.Button(head, text="🔒  Заблокировать", style="Ghost.TButton",
-                   command=self.lock).pack(side="right", padx=(8, 0))
-        ttk.Button(head, text="＋  Добавить", style="Accent.TButton",
-                   command=self.add).pack(side="right")
-        ttk.Label(head, text="🔍", style="Side.TLabel").pack(side="left", padx=(24, 4))
-        self.search = tk.StringVar()
-        self.search.trace_add("write", lambda *a: self.refresh_list())
-        self.search_entry = ttk.Entry(head, textvariable=self.search, width=40)
-        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 12))
-        hero = ttk.Frame(f, padding=(24, 15))
+            ttk.Menubutton(head, text=text, menu=menu).pack(side="left", padx=3)
+        ttk.Button(head, text="Заблокировать", command=self.lock).pack(side="right")
+        ttk.Button(head, text="Светлая / тёмная", command=self.toggle_theme).pack(side="right", padx=8)
+
+        hero = ttk.Frame(f, padding=(24, 22))
         hero.pack(fill="x")
-        ttk.Label(hero, text="Ваше цифровое хранилище", style="Hero.TLabel").pack(anchor="w")
-        ttk.Label(hero, text="Все учётные записи под защитой. Выберите запись, чтобы увидеть подробности.",
-                  style="HeroMuted.TLabel").pack(anchor="w", pady=(4, 0))
-        actions = ttk.Frame(f, padding=(24, 0))
-        actions.pack(fill="x")
-        ttk.Button(actions, text="◈  Аудит безопасности", command=self.audit).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="⚙  Настройки", command=lambda: SettingsDialog(self, self.root)).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="◉  Windows Hello", command=self.configure_hello).pack(side="left")
-        ttk.Label(actions, text="AES-256-GCM  ·  локальное хранилище", style="BgMuted.TLabel").pack(side="right")
+        ttk.Button(hero, text="＋  Новая запись", style="Accent.TButton",
+                   command=self.add).pack(side="right", pady=8)
+        ttk.Label(hero, text="Личное хранилище", style="Hero.TLabel").pack(anchor="w")
+        ttk.Label(hero, text="Ваши аккаунты, пароли и коды доступа — в одном месте.",
+                  style="HeroMuted.TLabel").pack(anchor="w", pady=(5, 0))
+        overview = ttk.Frame(f, padding=(24, 0))
+        overview.pack(fill="x")
+        self._build_stats(overview)
 
         bottom = ttk.Frame(f, style="Side.TFrame", padding=(14, 5))
         bottom.pack(side="bottom", fill="x")
@@ -2887,19 +2885,41 @@ class App:
         self.status_right.pack(side="right")
 
         body = ttk.PanedWindow(f, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=10, pady=10)
+        body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
 
         side_fr = ttk.Frame(body, style="Side.TFrame", width=240)
-        ttk.Label(side_fr, text="  РАЗДЕЛЫ И КАТЕГОРИИ", style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
-        self.side = ttk.Treeview(side_fr, show="tree", selectmode="browse", style="Side.Treeview")
+        ttk.Label(side_fr, text="ХРАНИЛИЩЕ", style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
+        navigation = ttk.Frame(side_fr, style="Side.TFrame")
+        self.side = ttk.Treeview(navigation, show="tree", selectmode="browse", style="Side.Treeview")
         self.side.column("#0", width=225)
         self.side.tag_configure("head", foreground=t["muted"], font=(FF, 8, "bold"))
-        self.side.pack(fill="both", expand=True, padx=4, pady=6)
+        tools = ttk.Frame(side_fr, style="Side.TFrame", padding=12)
+        tools.pack(side="bottom", fill="x")
+        ttk.Separator(tools).pack(fill="x", pady=(0, 12))
+        for text, command in (("Аудит безопасности", self.audit),
+                              ("Генератор паролей", lambda: GeneratorDialog(self, self.root)),
+                              ("Настройки", lambda: SettingsDialog(self, self.root))):
+            ttk.Button(tools, text=text, style="Ghost.TButton", command=command).pack(fill="x", pady=3)
+        navigation.pack(fill="both", expand=True)
+        self.side.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=6)
+        nav_scroll = ttk.Scrollbar(navigation, orient="vertical", command=self.side.yview)
+        nav_scroll.pack(side="right", fill="y")
+        self.side.configure(yscrollcommand=nav_scroll.set)
         self.side.bind("<<TreeviewSelect>>", self.on_side_select)
         body.add(side_fr, weight=0)
 
         center = ttk.Frame(body)
-        self._build_stats(center)
+        toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
+        toolbar.pack(fill="x")
+        ttk.Label(toolbar, text="Поиск по сервису, логину или тегу",
+                  style="Muted.TLabel").pack(side="bottom", anchor="w", pady=(8, 0))
+        ttk.Label(toolbar, text="Записи", style="Section.TLabel").pack(side="left", padx=(0, 18))
+        self.search = tk.StringVar()
+        self.search.trace_add("write", lambda *a: self.refresh_list())
+        self.search_entry = ttk.Entry(toolbar, textvariable=self.search, style="Search.TEntry")
+        self.search_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(toolbar, text="Найти", style="Compact.TButton",
+                   command=lambda: self.search_entry.focus_set()).pack(side="left", padx=(8, 0))
         lst = ttk.Frame(center, style="Panel.TFrame")
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
@@ -2923,7 +2943,7 @@ class App:
         self.tree.bind("<Button-3>", self.context_menu)
         body.add(center, weight=3)
 
-        det = ttk.Frame(body, style="Panel.TFrame", padding=16, width=370)
+        det = ttk.Frame(body, style="Panel.TFrame", padding=20, width=350)
         self._build_details(det)
         body.add(det, weight=1)
 
@@ -3005,10 +3025,10 @@ class App:
         row.pack(fill="x", pady=(0, 10))
         self.stat = {}
         spec = (("total", "Записей"), ("weak", "Слабых паролей"), ("reused", "Повторов"),
-                ("old", "Не менялись > года"), ("score", "Оценка безопасности"))
+                ("old", "Устаревшие"), ("score", "Оценка безопасности"))
         for i, (key, caption) in enumerate(spec):
             row.columnconfigure(i, weight=1, uniform="stat")
-            card = ttk.Frame(row, style="Card.TFrame", padding=(14, 10))
+            card = ttk.Frame(row, style="Card.TFrame", padding=(18, 14))
             card.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 8, 0))
             num = ttk.Label(card, text="0", style="Big.TLabel")
             num.pack(anchor="w")
@@ -3046,7 +3066,7 @@ class App:
                 ("source", "ИСТОЧНИК", ()), ("updated", "ИЗМЕНЕНО", ()))
         for i, (key, text, btns) in enumerate(spec, start=1):
             fr = ttk.Frame(p, style="Panel.TFrame")
-            ttk.Label(fr, text=text, style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
+            ttk.Label(fr, text=text, style="Muted.TLabel", font=(FF, 9)).pack(anchor="w")
             line = ttk.Frame(fr, style="Panel.TFrame")
             line.pack(fill="x", pady=(2, 0))
             var = tk.StringVar()
@@ -3054,7 +3074,7 @@ class App:
             ttk.Label(line, textvariable=var, style=lbl_style, wraplength=190,
                       justify="left").pack(side="left", fill="x", expand=True)
             for btn_text, cmd in reversed(btns):
-                b = ttk.Button(line, text=btn_text, command=cmd, width=11)
+                b = ttk.Button(line, text=btn_text, command=cmd, width=10, style="Compact.TButton")
                 b.pack(side="right", padx=(4, 0))
                 if key == "password" and btn_text == "Показать":
                     self.pw_btn = b
@@ -3291,8 +3311,9 @@ class App:
                                     e["note"], e["category"])).lower())]
         items.sort(key=sk, reverse=rev)
         self.tree.delete(*self.tree.get_children())
-        for e in items:
-            self.tree.insert("", "end", iid=e["id"], values=(
+        self.tree.tag_configure("alternate", background=self.t["card"])
+        for index, e in enumerate(items):
+            self.tree.insert("", "end", iid=e["id"], tags=("alternate",) if index % 2 else (), values=(
                 "★" if e["favorite"] else "", e["title"], e["login"], e["category"],
                 (e["deleted"] if self.cat_filter == "trash" else e["updated"])[:10]))
         if prev and self.tree.exists(prev[0]):
@@ -3608,3 +3629,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
