@@ -2943,8 +2943,8 @@ class App:
         self.tree.bind("<Button-3>", self.context_menu)
         body.add(center, weight=3)
 
-        det = ttk.Frame(body, style="Panel.TFrame", width=350)
-        detail_canvas = tk.Canvas(det, bg=t["panel"], highlightthickness=0, width=350)
+        det = ttk.Frame(body, style="Panel.TFrame", width=400)
+        detail_canvas = tk.Canvas(det, bg=t["panel"], highlightthickness=0, width=400)
         detail_scroll = ttk.Scrollbar(det, orient="vertical", command=detail_canvas.yview)
         detail_scroll.pack(side="right", fill="y")
         detail_canvas.pack(side="left", fill="both", expand=True)
@@ -3120,7 +3120,6 @@ class App:
         self.fav_btn = ttk.Button(r1, text="★", width=3, command=self.toggle_fav)
         self.fav_btn.pack(side="left", padx=4)
         ttk.Button(r1, text="⌨ Ввести", command=self.autotype_selected).pack(side="left")
-        ttk.Button(r1, text="Удалить", command=self.delete).pack(side="right")
         r2 = ttk.Frame(self.act_normal, style="Panel.TFrame")
         r2.pack(fill="x", pady=(6, 0))
         self.hist_btn = ttk.Button(r2, text="История", command=self.show_history)
@@ -3128,6 +3127,8 @@ class App:
         self.att_btn = ttk.Button(r2, text="Вложения", command=self.attachments)
         self.att_btn.pack(side="left", padx=4)
         ttk.Button(r2, text="Утечки?", command=self.check_pwned_selected).pack(side="left")
+        ttk.Button(self.act_normal, text="Удалить запись", style="Compact.TButton",
+                   command=self.delete).pack(anchor="w", pady=(10, 0))
         self.act_trash = ttk.Frame(p, style="Panel.TFrame")
         ttk.Button(self.act_trash, text="Восстановить", style="Accent.TButton",
                    command=self.restore).pack(side="left")
