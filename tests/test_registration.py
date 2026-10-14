@@ -19,8 +19,8 @@ class RegistrationTests(unittest.TestCase):
             self.assertTrue(os.path.samefile(data["path"],exe))
             self.assertEqual(data["allowed_origins"],["chrome-extension://"+"a"*32+"/"])
             self.assertIn(str(Path(tmp)/"MoiParoli"/"native"),manifest)
-            keys=[call.args[1] for call in registry.CreateKey.call_args_list]
-            self.assertEqual(len(keys),2)
+            keys=[call.args[1] for call in registry.CreateKeyEx.call_args_list]
+            self.assertEqual(len(keys),8)
             self.assertTrue(any("Google" in key for key in keys))
             self.assertTrue(any("Yandex" in key for key in keys))
 
@@ -29,3 +29,13 @@ class RegistrationTests(unittest.TestCase):
             make_manifest("bad","missing.exe")
         with self.assertRaises(ValueError):
             make_manifest("a"*32,"missing.exe")
+
+    def test_ids_are_preserved_when_adding_another_browser(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe=Path(tmp)/"browser_host.exe"
+            exe.write_bytes(b"test")
+            with patch.dict("sys.modules",{"winreg":MagicMock()}),patch.dict(os.environ,{"APPDATA":tmp}):
+                path=register("a"*32,str(exe))
+                register("b"*32,str(exe))
+            origins=json.loads(Path(path).read_text(encoding="utf-8"))["allowed_origins"]
+            self.assertEqual(len(origins),2)

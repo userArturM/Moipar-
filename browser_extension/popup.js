@@ -39,7 +39,7 @@ fillButton.addEventListener('click', async () => {
       }, args: [reply.login, reply.password, url.origin]
     });
     status.textContent = injection?.[0]?.result ? 'Поля заполнены. Проверьте сайт перед входом.' : 'Форма пароля не найдена.';
-  } catch (err) { status.textContent = err.message || 'Ошибка заполнения'; }
+  } catch (err) { status.textContent = typeof connectionError==='function' ? connectionError(err) : (err.message || 'Ошибка заполнения'); }
   finally { fillButton.disabled = false; }
 });
 

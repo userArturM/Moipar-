@@ -35,6 +35,10 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in ("MoiParoli.exe", "browser_host.exe", "browser_extension/manifest.json",
                  "register_browser_host.ps1", "unins000.exe"):
         assert (app / name).is_file(), f"Missing installed file: {name}"
+    from browser_registration import diagnose
+    assert all(item["ok"] for item in diagnose()), "Installer did not register all native host views"
+    subprocess.run(["node", "tools/test_native_connection.cjs", str(app / "browser_extension")],
+                   check=True, timeout=120)
     # A second installation exercises the same-directory replacement too.
     subprocess.run([str(setup), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                     "/SP-", f"/DIR={app}"], check=True, timeout=120)

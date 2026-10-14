@@ -32,6 +32,25 @@ const {chromium}=require('playwright');
       assert.equal(await page.evaluate(()=>Boolean(window.submitted)),false);
       assert.equal(await page.frames()[1].locator('input').inputValue(),'');
     }
+    await page.goto('https://example.test/login');
+    await page.locator('#user').fill('new@example.test');
+    await page.locator('#password').fill('NewFakePassword!789');
+    const nodes={save:{disabled:false},autosave:{disabled:false},connect:{}};
+    for(const node of Object.values(nodes))node.addEventListener=(_,fn)=>node.handler=fn;
+    const status={textContent:''};
+    let received;
+    const chrome={
+      tabs:{query:async()=>[{id:1,url:page.url()}],get:async()=>({url:page.url(),active:true})},
+      scripting:{executeScript:async({func})=>[{result:await page.evaluate(func)}]},
+      runtime:{sendNativeMessage:async(host,msg)=>{received=structuredClone(msg);return {ok:true,message:'Saved'}}},
+      storage:{local:{get:async()=>({})}}
+    };
+    vm.runInNewContext(fs.readFileSync('browser_extension/save.js','utf8'),{
+      document:{getElementById:id=>nodes[id]},chrome,URL,status});
+    await nodes.save.handler();
+    assert.equal(received.action,'save_credentials');
+    assert.equal(received.credentials.password,'NewFakePassword!789');
+    assert.equal(received.credentials.login,'new@example.test');
     console.log('Real browser DOM tests passed: visible fields, selected account, cancellation, changed tab, iframe exclusion, no submit');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exit(1)});

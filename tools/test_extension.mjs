@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const manifest = JSON.parse(fs.readFileSync('browser_extension/manifest.json', 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.deepEqual(manifest.permissions.sort(), ['activeTab', 'nativeMessaging', 'scripting'].sort());
+assert.deepEqual(manifest.permissions.sort(), ['activeTab', 'nativeMessaging', 'scripting', 'storage'].sort());
 const source = fs.readFileSync('browser_extension/popup.js', 'utf8');
 async function check({url='https://example.com/login', latest=url, ok=true} = {}) {
   const status = {textContent:''};

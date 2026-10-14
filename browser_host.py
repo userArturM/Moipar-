@@ -151,7 +151,100 @@ def select_record(host):
     return result
 
 
-def handle(msg, selector=select_record):
+def candidate_from_message(msg):
+    host=verified_origin(msg.get("url"))
+    credentials=msg.get("credentials")
+    if not isinstance(credentials,dict):
+        raise ValueError("Нет данных для сохранения")
+    result={"url":msg["url"]}
+    for key,limit in (("login",1024),("password",4096),("title",200)):
+        value=credentials.get(key,"")
+        if not isinstance(value,str) or len(value)>limit or "\x00" in value:
+            raise ValueError("Неверные данные записи")
+        result[key]=value
+    if not result["password"]:
+        raise ValueError("На странице не найден пароль")
+    result["title"]=result["title"].strip() or host
+    return host,result
+
+def save_to_vault(vault,host,candidate):
+    if not vault.unlocked:
+        raise ValueError("Хранилище заблокировано")
+    if verified_origin(candidate["url"])!=host:
+        raise ValueError("Адрес сайта изменился")
+    matches=[e for e in matching_records(vault.active(),host) if e.get("login","")==candidate["login"]]
+    if len(matches)>1:
+        raise ValueError("Для этого логина есть несколько записей. Объедините их в приложении.")
+    if matches:
+        if matches[0]["password"]==candidate["password"]:
+            return {"ok":True,"message":"Этот пароль уже сохранён"}
+        vault.update(matches[0]["id"],{"password":candidate["password"],"url":candidate["url"]})
+        return {"ok":True,"message":"Пароль обновлён"}
+    vault.add(dict(candidate,category="Из браузера",source="Browser extension"))
+    return {"ok":True,"message":"Пароль сохранён"}
+
+def save_record(host,candidate):
+    import tkinter as tk
+    from tkinter import ttk
+    from types import SimpleNamespace
+    from moi_paroli import App,Vault,Settings,data_dir,VaultError,_scroll_dialog_body
+    root=tk.Tk()
+    root.title("Мои пароли — сохранить пароль")
+    settings=Settings(os.path.join(data_dir(),"settings.json"))
+    App.apply_theme(SimpleNamespace(root=root,settings=settings))
+    frame=_scroll_dialog_body(root,24)
+    ttk.Label(frame,text="Сохранить пароль",font=("Segoe UI",20,"bold")).pack(anchor="w")
+    ttk.Label(frame,text=host,font=("Segoe UI",12,"bold")).pack(anchor="w",pady=(8,16))
+    ttk.Label(frame,text="Данные сайта").pack(anchor="w")
+    ttk.Label(frame,text=candidate["login"] or "Без логина",wraplength=420).pack(anchor="w",pady=8)
+    display=ttk.Entry(frame,show="•",width=44)
+    display.insert(0,candidate["password"])
+    display.configure(state="readonly")
+    display.pack(fill="x")
+    show=tk.BooleanVar(value=False)
+    ttk.Checkbutton(frame,text="Показать сохраняемый пароль",variable=show,
+                   command=lambda:display.configure(show="" if show.get() else "•")).pack(anchor="w",pady=8)
+    ttk.Label(frame,text="Мастер-пароль хранилища").pack(anchor="w",pady=(12,4))
+    master=ttk.Entry(frame,show="•")
+    master.pack(fill="x")
+    ttk.Label(frame,text="Ключевой файл, если используется").pack(anchor="w",pady=(10,4))
+    keypath=ttk.Entry(frame)
+    keypath.pack(fill="x")
+    status=ttk.Label(frame,text="",wraplength=420)
+    status.pack(fill="x",pady=12)
+    result={"ok":False,"error":"Сохранение отменено"}
+    def confirm():
+        nonlocal result
+        vault=Vault(settings.get("vault_path") or os.path.join(data_dir(),"vault.dat"))
+        try:
+            keydata=None
+            if keypath.get().strip():
+                with open(keypath.get().strip(),"rb") as f: keydata=f.read()
+            vault.unlock(master.get(),keydata)
+            result=save_to_vault(vault,host,candidate)
+            root.destroy()
+        except (VaultError,OSError,ValueError):
+            status.config(text="Не удалось сохранить. Проверьте мастер-пароль, ключевой файл и доступ к хранилищу.")
+            master.delete(0,"end")
+        finally:
+            vault.lock()
+    ttk.Button(frame,text="Подтвердить и сохранить",style="Accent.TButton",command=confirm).pack(fill="x")
+    ttk.Button(frame,text="Отмена",command=root.destroy).pack(fill="x",pady=(8,0))
+    root.bind("<Return>",lambda event:confirm())
+    root.bind("<Escape>",lambda event:root.destroy())
+    master.focus_set()
+    root.mainloop()
+    return result
+
+def handle(msg, selector=select_record, saver=save_record):
+    if msg.get("action")=="ping":
+        return {"ok":True,"version":"4.3","supports":["get_credentials","save_credentials"]}
+    if msg.get("action")=="save_credentials":
+        try:
+            host,candidate=candidate_from_message(msg)
+        except ValueError as exc:
+            return {"ok":False,"error":str(exc)}
+        return saver(host,candidate)
     if msg.get('action') != 'get_credentials':
         return {'ok': False, 'error': 'Unsupported action'}
     try:
@@ -162,6 +255,20 @@ def handle(msg, selector=select_record):
 
 
 def main():
+    if "--register" in sys.argv:
+        from browser_registration import register
+        from browser_identity import EXTENSION_ID
+        from pathlib import Path
+        identity=EXTENSION_ID
+        if "--extension-id" in sys.argv:
+            identity=sys.argv[sys.argv.index("--extension-id")+1]
+        exe=sys.executable if getattr(sys,"frozen",False) else str(Path(__file__).parent/"dist/browser_host.exe")
+        print(register(identity,exe))
+        return
+    if "--diagnose" in sys.argv:
+        from browser_registration import diagnose
+        print(json.dumps(diagnose(),ensure_ascii=False))
+        return
     # Don't ever print to stdout: it is reserved for the native protocol.
     try:
         request = read_message(sys.stdin.buffer)

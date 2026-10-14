@@ -1,6 +1,6 @@
 ﻿#define MyAppName "Мои пароли"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.2"
+#define MyAppVersion "4.3"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}
@@ -44,5 +44,6 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\browser_host.exe"; Parameters: "--register"; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExe}"; Description: "Запустить «{#MyAppName}»"; Flags: nowait postinstall skipifsilent
 

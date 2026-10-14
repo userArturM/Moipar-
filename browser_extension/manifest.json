@@ -1,9 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Мои пароли Pro — заполнение по разрешению",
-  "version": "4.0.0",
+  "version": "4.3.0",
   "description": "Однократное заполнение сохранённой записи по подтверждению в Windows.",
-  "permissions": ["activeTab", "nativeMessaging", "scripting"],
-  "action": {"default_popup": "popup.html", "default_title": "Мои пароли"}
+  "permissions": [
+    "activeTab",
+    "nativeMessaging",
+    "scripting",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Мои пароли"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1F7YPrZVBzPhCP05PRufxB3Wpk1FWUUr6+V2/gDbL1w9ld+OpXXJsViB+fR4EqZMLAljMZD8s4BD65ntRksltwUCf+5ZO6T/j8yRs9245wmAKtmZFDnJkUlNp86eNXpeCgW87qd07pmpG6U2ldmJ+3TRM7+XOkrRokuR1uS+RQ+J6ihOzgwGl5NgaSTnu24GhyeDedKnBWuX9Ouj66xfqql2XcLZJaSTUe4Ym++4k3LfSv02abhwZMBnTRuJOtKn1s2L3TN0c0dHErc4l8uYcrXD+HfDXapS6IM+/BlPvvqymQyxz+KnO7oyLvdKUwxNSBMb1GG3myRr2W5dIbARFQIDAQAB",
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
 }
-

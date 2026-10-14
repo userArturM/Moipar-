@@ -52,7 +52,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.2"
+APP_VERSION = "4.3"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 10
@@ -840,7 +840,7 @@ class Vault:
 
 
 class Settings:
-    DEFAULTS = {"theme": "dark", "idle_minutes": 5, "clipboard_seconds": 30,
+    DEFAULTS = {"theme": "light", "idle_minutes": 5, "clipboard_seconds": 30,
                 "lock_on_minimize": True, "geometry": "", "lock_on_session_lock": True,
                 "close_to_tray": True, "hotkey_enabled": True, "hotkey": "Ctrl+Alt+P",
                 "protect_capture": False, "autotype_enter": False, "check_updates": False,
@@ -1333,14 +1333,14 @@ def start_tray(app):
 FF = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
 
-DARK = {"bg": "#101217", "side": "#171a21", "panel": "#1c2028", "card": "#242932",
-        "fg": "#edf1f7", "muted": "#a3adbc", "accent": "#8aa7ff", "accent_hi": "#acc0ff",
-        "accent_fg": "#10172b", "sel": "#303d60", "border": "#343b47", "hover": "#303743",
-        "good": "#79d6b0", "warn": "#ebc17c", "bad": "#f59ba6"}
-LIGHT = {"bg": "#f3f5f9", "side": "#e9edf5", "panel": "#ffffff", "card": "#f5f7fb",
-         "fg": "#202b40", "muted": "#5e6d85", "accent": "#465dd8", "accent_hi": "#576fe8",
-         "accent_fg": "#ffffff", "sel": "#e3e9ff", "border": "#d8dfeb", "hover": "#e9eef8",
-         "good": "#217557", "warn": "#966219", "bad": "#b64055"}
+DARK = {"bg": "#161618", "side": "#202023", "panel": "#252528", "card": "#303034",
+        "fg": "#f5f5f7", "muted": "#a9a9b0", "accent": "#0067d9", "accent_hi": "#409cff",
+        "accent_fg": "#ffffff", "sel": "#173e65", "border": "#3a3a40", "hover": "#36363c",
+        "good": "#74d79a", "warn": "#f2c078", "bad": "#ff9a9f"}
+LIGHT = {"bg": "#f5f5f7", "side": "#ededf0", "panel": "#ffffff", "card": "#f7f7f9",
+         "fg": "#1d1d1f", "muted": "#67676f", "accent": "#0067d9", "accent_hi": "#007aff",
+         "accent_fg": "#ffffff", "sel": "#dfecfc", "border": "#dedee4", "hover": "#e8effa",
+         "good": "#24803e", "warn": "#a05d00", "bad": "#b73843"}
 THEMES = {"dark": DARK, "light": LIGHT}
 LEVEL_STYLE = {0: "Bad", 1: "Warn", 2: "Good", 3: "Good"}
 
@@ -1433,6 +1433,74 @@ def _scroll_dialog_body(top, padding=20):
     return frame
 
 
+class RoundedCard(ttk.Frame):
+    def __init__(self,parent,palette):
+        super().__init__(parent)
+        self.canvas=tk.Canvas(self,bg=palette["bg"],highlightthickness=0,height=90)
+        self.canvas.pack(fill="both",expand=True)
+        self.body=ttk.Frame(self.canvas,style="Panel.TFrame")
+        self.window=self.canvas.create_window((16,14),window=self.body,anchor="nw")
+        def draw(event=None):
+            width=max(48,self.canvas.winfo_width())
+            height=max(60,self.body.winfo_reqheight()+28)
+            self.canvas.configure(height=height)
+            self.canvas.delete("surface")
+            r=16
+            points=[r,1,width-r,1,width-1,1,width-1,r,width-1,height-r,
+                    width-1,height-1,width-r,height-1,r,height-1,1,height-1,1,height-r,1,r,1,1]
+            self.canvas.create_polygon(points,smooth=True,splinesteps=24,fill=palette["panel"],
+                                       outline=palette["border"],tags="surface")
+            self.canvas.tag_lower("surface")
+            self.canvas.itemconfigure(self.window,width=max(16,width-32))
+        self.canvas.bind("<Configure>",draw)
+        self.body.bind("<Configure>",draw)
+
+
+class BrowserDialog:
+    def __init__(self,app,parent):
+        from browser_identity import EXTENSION_ID
+        from browser_registration import register,diagnose
+        top=_new_top(app,parent,"Подключение браузера")
+        frame=_scroll_dialog_body(top,24)
+        ttk.Label(frame,text="Браузер и приложение",font=(FF,18,"bold")).pack(anchor="w")
+        ttk.Label(frame,text="Заполняйте поля и сохраняйте новые пароли с подтверждением.",
+                  wraplength=520,foreground=app.t["muted"]).pack(anchor="w",pady=(6,18))
+        ttk.Label(frame,text="Постоянный ID расширения").pack(anchor="w")
+        value=tk.StringVar(value=EXTENSION_ID)
+        ttk.Entry(frame,textvariable=value,state="readonly",width=48).pack(fill="x",pady=6)
+        ttk.Label(frame,text="В браузере загрузите папку browser_extension из каталога установки. "
+                  "ID должен совпадать с указанным выше. Регистрация выполняется установщиком автоматически.",
+                  wraplength=520,foreground=app.t["muted"]).pack(anchor="w",pady=(6,14))
+        status=ttk.Label(frame,text="",wraplength=520,justify="left")
+        status.pack(fill="x",pady=12)
+        def check():
+            try:
+                checks=diagnose()
+                names={"Google\\Chrome":"Chrome","Yandex\\YandexBrowser":"Яндекс",
+                       "Microsoft\\Edge":"Edge","Chromium":"Chromium"}
+                lines=[]
+                for browser,label in names.items():
+                    valid=all(item["ok"] for item in checks if item["browser"]==browser)
+                    lines.append(label+": "+("подключение настроено" if valid else "требуется восстановление"))
+                status.config(text="\n".join(lines))
+            except (OSError,ValueError):
+                status.config(text="Не удалось проверить подключение.")
+        def repair():
+            folder=os.path.dirname(sys.executable) if getattr(sys,"frozen",False) else os.path.dirname(__file__)
+            exe=os.path.join(folder,"browser_host.exe")
+            if not os.path.isfile(exe):exe=os.path.join(folder,"dist","browser_host.exe")
+            try:
+                register(EXTENSION_ID,exe)
+                check()
+            except (OSError,ValueError) as exc:
+                status.config(text="Подключение не восстановлено: "+str(exc))
+        ttk.Button(frame,text="Восстановить подключение",style="Accent.TButton",command=repair).pack(fill="x")
+        ttk.Button(frame,text="Проверить снова",command=check).pack(fill="x",pady=(8,0))
+        ttk.Button(frame,text="Закрыть",command=top.destroy).pack(anchor="e",pady=(16,0))
+        check()
+        top.bind("<Escape>",lambda event:top.destroy())
+        top.grab_set()
+        parent.wait_window(top)
 class ConflictDialog:
     def __init__(self, app, snapshot):
         self.result = None
@@ -2304,10 +2372,12 @@ class App:
         s.configure("Title.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, 16, "bold"))
         s.configure("Big.TLabel", background=t["card"], foreground=t["fg"], font=(FF, 24, "bold"))
         s.configure("Brand.TLabel", background=t["side"], foreground=t["fg"], font=(FF, 15, "bold"))
-        s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, 26, "bold"))
+        s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, 22, "bold"))
         s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, 10))
         s.configure("SideHeading.TLabel", background=t["side"], foreground=t["muted"], font=(FF, 9, "bold"))
         s.configure("Mono.TLabel", background=t["panel"], foreground=t["fg"], font=(MONO, 11))
+        s.configure("StatValue.TLabel",background=t["panel"],foreground=t["fg"],font=(FF,22,"bold"))
+        s.configure("StatCaption.TLabel",background=t["panel"],foreground=t["muted"],font=(FF,9))
 
         s.configure("TButton", padding=(14, 9), background=t["card"], foreground=t["fg"],
                     bordercolor=t["border"], relief="flat", focusthickness=0)
@@ -3000,12 +3070,12 @@ class App:
         ttk.Button(head, text="Заблокировать", command=self.lock).pack(side="right")
         ttk.Button(head, text="Светлая / тёмная", command=self.toggle_theme).pack(side="right", padx=8)
 
-        hero = ttk.Frame(f, padding=(24, 22))
+        hero = ttk.Frame(f, padding=(24, 18))
         hero.pack(fill="x")
-        ttk.Button(hero, text="＋  Новая запись", style="Accent.TButton",
+        ttk.Button(hero, text="＋  Добавить пароль", style="Accent.TButton",
                    command=self.add).pack(side="right", pady=8)
-        ttk.Label(hero, text="Личное хранилище", style="Hero.TLabel").pack(anchor="w")
-        ttk.Label(hero, text="Ваши аккаунты, пароли и коды доступа — в одном месте.",
+        ttk.Label(hero, text="Ваши пароли", style="Hero.TLabel").pack(anchor="w")
+        ttk.Label(hero, text="Всё, что нужно для входа. В одном спокойном пространстве.",
                   style="HeroMuted.TLabel").pack(anchor="w", pady=(5, 0))
         overview = ttk.Frame(f, padding=(24, 0))
         overview.pack(fill="x")
@@ -3025,13 +3095,14 @@ class App:
         body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
 
         side_fr = ttk.Frame(body, style="Side.TFrame", width=240)
-        ttk.Label(side_fr, text="ХРАНИЛИЩЕ", style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
+        ttk.Label(side_fr, text="БИБЛИОТЕКА", style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
         navigation = ttk.Frame(side_fr, style="Side.TFrame")
         self.side = ttk.Treeview(navigation, show="tree", selectmode="browse", style="Side.Treeview")
         self.side.column("#0", width=225)
         self.side.tag_configure("head", foreground=t["muted"], font=(FF, 8, "bold"))
         tools = ttk.Frame(side_fr, style="Side.TFrame", padding=12)
         tools.pack(side="bottom", fill="x")
+        ttk.Button(tools,text="Браузеры",style="Ghost.TButton",command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=3)
         ttk.Separator(tools).pack(fill="x", pady=(0, 12))
         for text, command in (("Аудит безопасности", self.audit),
                               ("Генератор паролей", lambda: GeneratorDialog(self, self.root)),
@@ -3051,7 +3122,7 @@ class App:
         center = ttk.Frame(body)
         toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
         toolbar.pack(fill="x")
-        ttk.Label(toolbar, text="Поиск по сервису, логину или тегу",
+        ttk.Label(toolbar, text="Поиск по названию, логину или тегу",
                   style="Muted.TLabel").pack(side="bottom", anchor="w", pady=(8, 0))
         ttk.Label(toolbar, text="Записи", style="Section.TLabel").pack(side="left", padx=(0, 18))
         self.search = tk.StringVar()
@@ -3146,6 +3217,7 @@ class App:
 
     def _tools_menu(self):
         m = self._menu()
+        m.add_command(label="Браузеры: подключение и диагностика",command=lambda:BrowserDialog(self,self.root))
         m.add_command(label="Разрешить конфликты…", command=self.resolve_conflicts)
         m.add_command(label="Быстрый поиск", command=self.quick_search)
         m.add_command(label="Аудит безопасности…", command=self.audit)
@@ -3194,13 +3266,13 @@ class App:
                 ("old", "Устаревшие"), ("score", "Оценка безопасности"))
         for i, (key, caption) in enumerate(spec):
             row.columnconfigure(i, weight=1, uniform="stat")
-            card = ttk.Frame(row, style="Card.TFrame", padding=(18, 14))
+            card = RoundedCard(row,self.t)
             card.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 8, 0))
-            num = ttk.Label(card, text="0", style="Big.TLabel")
+            num = ttk.Label(card.body, text="0", style="StatValue.TLabel")
             num.pack(anchor="w")
-            cap = ttk.Label(card, text=caption, style="CardMuted.TLabel")
+            cap = ttk.Label(card.body, text=caption, style="StatCaption.TLabel")
             cap.pack(anchor="w")
-            for w in (card, num, cap):
+            for w in (card.canvas, num, cap):
                 w.bind("<Button-1>", lambda e: self.audit())
             self.stat[key] = num
 
@@ -3406,7 +3478,7 @@ class App:
         act = v.active()
         ins = self.side.insert
         self.side.delete(*self.side.get_children())
-        ins("", "end", iid="all", text=f"  📁   Все записи  ({len(act)})")
+        ins("", "end", iid="all", text=f"  ▤   Все пароли  ({len(act)})")
         ins("", "end", iid="fav", text=f"  ★   Избранное  ({sum(1 for e in act if e['favorite'])})")
         cats = v.categories()
         unc = sum(1 for e in act if not e["category"])
@@ -3414,9 +3486,9 @@ class App:
             ins("", "end", iid="h_cat", text="   КАТЕГОРИИ", tags=("head",))
             for c in cats:
                 n = sum(1 for e in act if e["category"] == c)
-                ins("", "end", iid="cat:" + c, text=f"  🏷   {c}  ({n})")
+                ins("", "end", iid="cat:" + c, text=f"  ◇   {c}  ({n})")
             if unc:
-                ins("", "end", iid="uncat", text=f"  ∅   Без категории  ({unc})")
+                ins("", "end", iid="uncat", text=f"  —   Без категории  ({unc})")
         tags = sorted({x for e in act for x in split_tags(e["tags"])}, key=str.lower)
         if tags:
             ins("", "end", iid="h_tag", text="   ТЕГИ", tags=("head",))
@@ -3424,7 +3496,7 @@ class App:
                 n = sum(1 for e in act if tg.lower() in [x.lower() for x in split_tags(e["tags"])])
                 ins("", "end", iid="tag:" + tg, text=f"  #   {tg}  ({n})")
         ins("", "end", iid="h_sys", text="   СИСТЕМА", tags=("head",))
-        ins("", "end", iid="trash", text=f"  🗑   Корзина  ({len(v.trash())})")
+        ins("", "end", iid="trash", text=f"  ⌫   Корзина  ({len(v.trash())})")
         if not self.side.exists(self.cat_filter):
             self.cat_filter = "all"
         self.side.selection_set(self.cat_filter)
