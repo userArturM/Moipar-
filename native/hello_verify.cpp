@@ -18,7 +18,8 @@ int wmain(int argc, wchar_t** argv) {
         auto interop = winrt::get_activation_factory<UserConsentVerifier, IUserConsentVerifierInterop>();
         auto result = winrt::capture<winrt::Windows::Foundation::IAsyncOperation<UserConsentVerificationResult>>(
             interop, &IUserConsentVerifierInterop::RequestVerificationForWindowAsync,
-            owner, winrt::get_abi(winrt::hstring(L"Разблокировать «Мои пароли»"))).get();
+            owner, reinterpret_cast<HSTRING>(winrt::get_abi(
+                winrt::hstring(L"Разблокировать «Мои пароли»")))).get();
         return result == UserConsentVerificationResult::Verified ? 0 : 1;
     } catch (...) { return 3; }
 }
