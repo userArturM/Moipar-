@@ -26,6 +26,12 @@ jobs:
         run: pyinstaller --onefile --noconsole --name browser_host browser_host.py
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
+      - name: Check optional browser extension
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath browser_extension -PathType Container)) {
+            Write-Output "::warning::browser_extension is absent. The desktop installer will be built without browser autofill."
+          }
       - name: Installer EXE
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
