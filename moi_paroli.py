@@ -1327,11 +1327,11 @@ def start_tray(app):
         from PIL import Image
         img = Image.open(io.BytesIO(base64.b64decode(ICON_B64)))
         menu = pystray.Menu(
-            pystray.MenuItem("Открыть", lambda *a: app.post(app.show_window), default=True),
-            pystray.MenuItem("Быстрый поиск", lambda *a: app.post(app.quick_search)),
-            pystray.MenuItem("Заблокировать", lambda *a: app.post(app.lock)),
-            pystray.MenuItem("Выход", lambda *a: app.post(app.quit_app)))
-        icon = pystray.Icon("MoiParoli", img, APP_NAME, menu)
+            pystray.MenuItem(lambda item: tr("Открыть"), lambda *a: app.post(app.show_window), default=True),
+            pystray.MenuItem(lambda item: tr("Быстрый поиск"), lambda *a: app.post(app.quick_search)),
+            pystray.MenuItem(lambda item: tr("Заблокировать"), lambda *a: app.post(app.lock)),
+            pystray.MenuItem(lambda item: tr("Выход"), lambda *a: app.post(app.quit_app)))
+        icon = pystray.Icon("MoiParoli", img, tr(APP_NAME), menu)
         icon.run_detached()
         return icon
     except Exception:
@@ -2666,19 +2666,28 @@ class App:
 
     # ---------------- проверки через интернет
     def check_updates(self, manual=True):
+        if getattr(self,"_update_running",False):return
         repo = (self.settings.get("update_repo") or "userArturM/Moipar-").strip()
         if not REPO_RE.match(repo):
             if manual:
                 messagebox.showinfo(tr(APP_NAME), tr('Укажите репозиторий GitHub в Сервис → Настройки (например, ivan/moi-paroli).'), parent=self.root)
             return
 
+        self._update_running=True
+        if manual and hasattr(self,"status_left") and self.status_left.winfo_exists():
+            self.set_status(tr("Проверка обновлений GitHub…"),self.t["muted"])
+        def finish(info):
+            self._update_running=False
+            if manual and hasattr(self,"status_left") and self.status_left.winfo_exists():
+                self.set_status(tr("Проверка обновлений завершена"),self.t["bad"] if "error" in info else self.t["good"])
+            self._show_update(info,manual)
         def work():
             try:
                 from github_updates import load_token
                 info = check_update(repo, token=load_token(data_dir()))
             except Exception as ex:
                 info = {"error": str(ex)}
-            self.post(lambda: self._show_update(info, manual))
+            self.post(lambda: finish(info))
         threading.Thread(target=work, daemon=True).start()
 
     def _show_update(self, info, manual):
@@ -3240,6 +3249,9 @@ class App:
         self.settings.set("language",language)
         localization.set_language(language)
         self.root.title(localization.tr(APP_NAME))
+        if self.tray:
+            self.tray.title=tr(APP_NAME)
+            self.tray.update_menu()
         if self.vault.unlocked:self.show_main()
         else:self.show_login()
 

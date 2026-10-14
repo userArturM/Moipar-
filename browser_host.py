@@ -80,6 +80,7 @@ def select_record(host):
     settings = Settings(os.path.join(data_dir(), 'settings.json'))
     from localization import set_language
     set_language(settings.get('language'))
+    root.title(tr('Мои пароли — разрешить заполнение'))
     appearance = SimpleNamespace(root=root, settings=settings)
     App.apply_theme(appearance)
     result = {'ok': False, 'error': tr('Отменено пользователем')}
@@ -196,6 +197,7 @@ def save_record(host,candidate):
     settings=Settings(os.path.join(data_dir(),"settings.json"))
     from localization import set_language
     set_language(settings.get("language"))
+    root.title(tr("Мои пароли — сохранить пароль"))
     App.apply_theme(SimpleNamespace(root=root,settings=settings))
     frame=_scroll_dialog_body(root,24)
     ttk.Label(frame,text=tr('Сохранить пароль'),font=("Segoe UI",20,"bold")).pack(anchor="w")

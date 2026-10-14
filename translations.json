@@ -408,5 +408,7 @@
   "Лицензионный ключ": "License key",
   "Сервер / SSH": "Server / SSH",
   "Электронная почта": "Email",
-  "GitHub не разрешил доступ. Для приватного репозитория добавьте токен в настройках с доступом Contents: Read и Actions: Read. Можно открыть страницу сборок в браузере.": "GitHub denied access. For a private repository, add a token in Settings with Contents: Read and Actions: Read access. You can also open the builds page in your browser."
+  "GitHub не разрешил доступ. Для приватного репозитория добавьте токен в настройках с доступом Contents: Read и Actions: Read. Можно открыть страницу сборок в браузере.": "GitHub denied access. For a private repository, add a token in Settings with Contents: Read and Actions: Read access. You can also open the builds page in your browser.",
+  "Проверка обновлений GitHub…": "Checking GitHub updates…",
+  "Проверка обновлений завершена": "Update check finished"
 }
