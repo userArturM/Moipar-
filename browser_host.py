@@ -1,3 +1,4 @@
+from localization import tr
 """One-shot, user-approved Native Messaging host for Chromium browsers.
 
 The browser never receives the master password. A fresh native dialog asks for it
@@ -73,27 +74,29 @@ def select_record(host):
     from types import SimpleNamespace
 
     root = tk.Tk()
-    root.title('Мои пароли — разрешить заполнение')
+    root.title(tr('Мои пароли — разрешить заполнение'))
     root.geometry('540x390')
     root.resizable(False, False)
     settings = Settings(os.path.join(data_dir(), 'settings.json'))
+    from localization import set_language
+    set_language(settings.get('language'))
     appearance = SimpleNamespace(root=root, settings=settings)
     App.apply_theme(appearance)
-    result = {'ok': False, 'error': 'Отменено пользователем'}
-    ttk.Label(root, text='Запрос пароля для сайта:', font=('Segoe UI', 11)).pack(pady=(16, 3))
+    result = {'ok': False, 'error': tr('Отменено пользователем')}
+    ttk.Label(root, text=tr('Запрос пароля для сайта:'), font=('Segoe UI', 11)).pack(pady=(16, 3))
     ttk.Label(root, text=host, font=('Segoe UI', 12, 'bold')).pack()
-    ttk.Label(root, text='Проверьте адрес сайта перед подтверждением.').pack(pady=8)
+    ttk.Label(root, text=tr('Проверьте адрес сайта перед подтверждением.')).pack(pady=8)
     frame = ttk.Frame(root)
     frame.pack(fill='x', padx=24)
-    ttk.Label(frame, text='Мастер-пароль:').pack(anchor='w')
+    ttk.Label(frame, text=tr('Мастер-пароль:')).pack(anchor='w')
     password = ttk.Entry(frame, show='•')
     password.pack(fill='x')
     password.focus_set()
-    ttk.Label(frame, text='Ключевой файл (если используется):').pack(anchor='w', pady=(9, 0))
+    ttk.Label(frame, text=tr('Ключевой файл (если используется):')).pack(anchor='w', pady=(9, 0))
     keypath = ttk.Entry(frame)
     keypath.pack(fill='x')
 
-    ttk.Label(root, text='Если есть несколько аккаунтов, выберите один после разблокировки.').pack(pady=(8, 0))
+    ttk.Label(root, text=tr('Если есть несколько аккаунтов, выберите один после разблокировки.')).pack(pady=(8, 0))
 
     def confirm():
         nonlocal result
@@ -108,23 +111,23 @@ def select_record(host):
             vault.unlock(password.get(), keydata)
             entries = matching_records(vault.active(), host)
             if not entries:
-                result = {'ok': False, 'error': 'Для этого домена нет сохранённых паролей'}
+                result = {'ok': False, 'error': tr('Для этого домена нет сохранённых паролей')}
             else:
                 entry = entries[0]
                 if len(entries) > 1:
                     # Do not expose record passwords until the user actively chooses.
                     chooser = tk.Toplevel(root)
-                    chooser.title('Выбор аккаунта')
+                    chooser.title(tr('Выбор аккаунта'))
                     chooser.geometry('440x270')
                     chooser.grab_set()
-                    ttk.Label(chooser, text='Выберите аккаунт для ' + host).pack(pady=12)
+                    ttk.Label(chooser, text=tr('Выберите аккаунт для ') + host).pack(pady=12)
                     chooser.configure(bg=appearance.t['bg'])
                     choices = tk.Listbox(chooser, exportselection=False, relief='flat',
                                          bg=appearance.t['card'], fg=appearance.t['fg'],
                                          selectbackground=appearance.t['sel'],
                                          selectforeground=appearance.t['fg'])
                     for index, candidate in enumerate(entries):
-                        choices.insert(tk.END, str(index + 1) + '. ' + str(candidate.get('login') or candidate.get('title') or 'Без имени'))
+                        choices.insert(tk.END, str(index + 1) + '. ' + str(candidate.get('login') or candidate.get('title') or tr('Без имени')))
                     choices.pack(fill='both', expand=True, padx=16)
                     choices.selection_set(0)
                     selected = {'entry': None}
@@ -133,19 +136,19 @@ def select_record(host):
                         if indices:
                             selected['entry'] = entries[indices[0]]
                         chooser.destroy()
-                    ttk.Button(chooser, text='Подтвердить выбранный аккаунт', command=choose).pack(pady=9)
+                    ttk.Button(chooser, text=tr('Подтвердить выбранный аккаунт'), command=choose).pack(pady=9)
                     root.wait_window(chooser)
                     entry = selected['entry']
                 if entry is not None:
                     result = {'ok': True, 'login': entry.get('login', ''), 'password': entry['password']}
             vault.lock()
         except (OSError, ValueError, VaultError) as exc:
-            result = {'ok': False, 'error': 'Не удалось открыть хранилище: ' + type(exc).__name__}
+            result = {'ok': False, 'error': tr('Не удалось открыть хранилище: ') + type(exc).__name__}
         finally:
             vault.lock()
             root.destroy()
 
-    ttk.Button(root, text='Разрешить однократное заполнение', command=confirm).pack(pady=14)
+    ttk.Button(root, text=tr('Разрешить однократное заполнение'), command=confirm).pack(pady=14)
     root.bind('<Return>', lambda _: confirm())
     root.mainloop()
     return result
@@ -155,33 +158,33 @@ def candidate_from_message(msg):
     host=verified_origin(msg.get("url"))
     credentials=msg.get("credentials")
     if not isinstance(credentials,dict):
-        raise ValueError("Нет данных для сохранения")
+        raise ValueError(tr('Нет данных для сохранения'))
     result={"url":msg["url"]}
     for key,limit in (("login",1024),("password",4096),("title",200)):
         value=credentials.get(key,"")
         if not isinstance(value,str) or len(value)>limit or "\x00" in value:
-            raise ValueError("Неверные данные записи")
+            raise ValueError(tr('Неверные данные записи'))
         result[key]=value
     if not result["password"]:
-        raise ValueError("На странице не найден пароль")
+        raise ValueError(tr('На странице не найден пароль'))
     result["title"]=result["title"].strip() or host
     return host,result
 
 def save_to_vault(vault,host,candidate):
     if not vault.unlocked:
-        raise ValueError("Хранилище заблокировано")
+        raise ValueError(tr('Хранилище заблокировано'))
     if verified_origin(candidate["url"])!=host:
-        raise ValueError("Адрес сайта изменился")
+        raise ValueError(tr('Адрес сайта изменился'))
     matches=[e for e in matching_records(vault.active(),host) if e.get("login","")==candidate["login"]]
     if len(matches)>1:
-        raise ValueError("Для этого логина есть несколько записей. Объедините их в приложении.")
+        raise ValueError(tr('Для этого логина есть несколько записей. Объедините их в приложении.'))
     if matches:
         if matches[0]["password"]==candidate["password"]:
-            return {"ok":True,"message":"Этот пароль уже сохранён"}
+            return {"ok":True,"message":tr('Этот пароль уже сохранён')}
         vault.update(matches[0]["id"],{"password":candidate["password"],"url":candidate["url"]})
-        return {"ok":True,"message":"Пароль обновлён"}
-    vault.add(dict(candidate,category="Из браузера",source="Browser extension"))
-    return {"ok":True,"message":"Пароль сохранён"}
+        return {"ok":True,"message":tr('Пароль обновлён')}
+    vault.add(dict(candidate,category=tr('Из браузера'),source="Browser extension"))
+    return {"ok":True,"message":tr('Пароль сохранён')}
 
 def save_record(host,candidate):
     import tkinter as tk
@@ -189,30 +192,32 @@ def save_record(host,candidate):
     from types import SimpleNamespace
     from moi_paroli import App,Vault,Settings,data_dir,VaultError,_scroll_dialog_body
     root=tk.Tk()
-    root.title("Мои пароли — сохранить пароль")
+    root.title(tr('Мои пароли — сохранить пароль'))
     settings=Settings(os.path.join(data_dir(),"settings.json"))
+    from localization import set_language
+    set_language(settings.get("language"))
     App.apply_theme(SimpleNamespace(root=root,settings=settings))
     frame=_scroll_dialog_body(root,24)
-    ttk.Label(frame,text="Сохранить пароль",font=("Segoe UI",20,"bold")).pack(anchor="w")
+    ttk.Label(frame,text=tr('Сохранить пароль'),font=("Segoe UI",20,"bold")).pack(anchor="w")
     ttk.Label(frame,text=host,font=("Segoe UI",12,"bold")).pack(anchor="w",pady=(8,16))
-    ttk.Label(frame,text="Данные сайта").pack(anchor="w")
-    ttk.Label(frame,text=candidate["login"] or "Без логина",wraplength=420).pack(anchor="w",pady=8)
+    ttk.Label(frame,text=tr('Данные сайта')).pack(anchor="w")
+    ttk.Label(frame,text=candidate["login"] or tr('Без логина'),wraplength=420).pack(anchor="w",pady=8)
     display=ttk.Entry(frame,show="•",width=44)
     display.insert(0,candidate["password"])
     display.configure(state="readonly")
     display.pack(fill="x")
     show=tk.BooleanVar(value=False)
-    ttk.Checkbutton(frame,text="Показать сохраняемый пароль",variable=show,
+    ttk.Checkbutton(frame,text=tr('Показать сохраняемый пароль'),variable=show,
                    command=lambda:display.configure(show="" if show.get() else "•")).pack(anchor="w",pady=8)
-    ttk.Label(frame,text="Мастер-пароль хранилища").pack(anchor="w",pady=(12,4))
+    ttk.Label(frame,text=tr('Мастер-пароль хранилища')).pack(anchor="w",pady=(12,4))
     master=ttk.Entry(frame,show="•")
     master.pack(fill="x")
-    ttk.Label(frame,text="Ключевой файл, если используется").pack(anchor="w",pady=(10,4))
+    ttk.Label(frame,text=tr('Ключевой файл, если используется')).pack(anchor="w",pady=(10,4))
     keypath=ttk.Entry(frame)
     keypath.pack(fill="x")
     status=ttk.Label(frame,text="",wraplength=420)
     status.pack(fill="x",pady=12)
-    result={"ok":False,"error":"Сохранение отменено"}
+    result={"ok":False,"error":tr('Сохранение отменено')}
     def confirm():
         nonlocal result
         vault=Vault(settings.get("vault_path") or os.path.join(data_dir(),"vault.dat"))
@@ -224,12 +229,12 @@ def save_record(host,candidate):
             result=save_to_vault(vault,host,candidate)
             root.destroy()
         except (VaultError,OSError,ValueError):
-            status.config(text="Не удалось сохранить. Проверьте мастер-пароль, ключевой файл и доступ к хранилищу.")
+            status.config(text=tr('Не удалось сохранить. Проверьте мастер-пароль, ключевой файл и доступ к хранилищу.'))
             master.delete(0,"end")
         finally:
             vault.lock()
-    ttk.Button(frame,text="Подтвердить и сохранить",style="Accent.TButton",command=confirm).pack(fill="x")
-    ttk.Button(frame,text="Отмена",command=root.destroy).pack(fill="x",pady=(8,0))
+    ttk.Button(frame,text=tr('Подтвердить и сохранить'),style="Accent.TButton",command=confirm).pack(fill="x")
+    ttk.Button(frame,text=tr('Отмена'),command=root.destroy).pack(fill="x",pady=(8,0))
     root.bind("<Return>",lambda event:confirm())
     root.bind("<Escape>",lambda event:root.destroy())
     master.focus_set()
@@ -238,7 +243,7 @@ def save_record(host,candidate):
 
 def handle(msg, selector=select_record, saver=save_record):
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.3","supports":["get_credentials","save_credentials"]}
+        return {"ok":True,"version":"4.4","supports":["get_credentials","save_credentials"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)

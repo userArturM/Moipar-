@@ -3,7 +3,7 @@ const autoSave=document.getElementById('autosave');
 function connectionError(error) {
   const message=error?.message || String(error);
   if (/native messaging host.*not found|host not found/i.test(message))
-    return 'Нет связи с приложением. Установите версию 4.3 и откройте «Браузеры → Восстановить подключение».';
+    return 'Нет связи с приложением. Установите версию 4.4 и откройте «Браузеры → Восстановить подключение».';
   return message;
 }
 saveButton.addEventListener('click',async()=>{
@@ -39,7 +39,7 @@ saveButton.addEventListener('click',async()=>{
 document.getElementById('connect').addEventListener('click',async()=>{
   try {
     const response=await chrome.runtime.sendNativeMessage('ru.moiparoli.host',{action:'ping'});
-    if(!response?.ok)throw Error('Обновите приложение до версии 4.3');
+    if(!response?.ok)throw Error('Обновите приложение до версии 4.4');
     status.textContent='Приложение подключено · '+response.version;
   }catch(error){status.textContent=connectionError(error)}
 });

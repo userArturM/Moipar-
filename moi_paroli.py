@@ -38,6 +38,7 @@ import webbrowser
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs
 
+from localization import tr
 from windows_hello import HelloUnlock, HelloUnavailable
 from cryptography.exceptions import InvalidTag
 from cryptography.fernet import Fernet, InvalidToken
@@ -52,10 +53,10 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.3"
+APP_VERSION = "4.4"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
-MIN_MASTER_LEN = 10
+MIN_MASTER_LEN = 4
 TRASH_DAYS = 30
 OLD_PASSWORD_DAYS = 365
 HISTORY_LIMIT = 10
@@ -333,6 +334,7 @@ class Vault:
 
     # --- создание / вход
     def create(self, password, keyfile=None):
+        if len(password)<MIN_MASTER_LEN: raise ValueError("Master password must contain at least 4 characters")
         self.keyfile = self.keyfile_digest(keyfile)
         self.kdf = self._new_kdf()
         self.key = self.derive(password, **self.kdf, keyfile=self.keyfile)
@@ -421,6 +423,7 @@ class Vault:
         return hmac.compare_digest(self.derive(password, **self.kdf, keyfile=self.keyfile), self.key)
 
     def change_password(self, new_password):
+        if len(new_password)<MIN_MASTER_LEN: raise ValueError("Master password must contain at least 4 characters")
         self.sync_from_disk(write=False)          # сначала подтянуть чужие правки (старым ключом)
         self.kdf = self._new_kdf()
         self.key = self.derive(new_password, **self.kdf, keyfile=self.keyfile)
@@ -663,6 +666,22 @@ class Vault:
         names = set(self.meta.get("categories", [])) | {e["category"] for e in self.active() if e["category"]}
         return sorted(names, key=str.lower)
 
+    def delete_category(self, name):
+        if not self.unlocked: raise VaultError("Хранилище заблокировано")
+        self.sync_from_disk(write=False)
+        import copy
+        previous_entries,previous_meta=copy.deepcopy(self.entries),copy.deepcopy(self.meta)
+        try:
+            self.meta["categories"]=[c for c in self.meta.get("categories",[]) if c!=name]
+            for entry in self.entries:
+                if entry["category"]==name:
+                    entry["category"]=""
+                    self._touch(entry)
+            self.save()
+        except Exception:
+            self.entries,self.meta=previous_entries,previous_meta
+            raise
+
     def _register_category(self, cat):
         if cat and cat not in self.meta["categories"]:
             self.meta["categories"].append(cat)
@@ -844,7 +863,7 @@ class Settings:
                 "lock_on_minimize": True, "geometry": "", "lock_on_session_lock": True,
                 "close_to_tray": True, "hotkey_enabled": True, "hotkey": "Ctrl+Alt+P",
                 "protect_capture": False, "autotype_enter": False, "check_updates": False,
-                "update_repo": "", "vault_path": "", "keyfile_path": ""}
+                "language": "ru", "animations": True, "update_repo": "userArturM/Moipar-", "vault_path": "", "keyfile_path": ""}
 
     def __init__(self, path):
         self.path = path
@@ -1063,17 +1082,9 @@ def parse_version(text):
 REPO_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*/[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
 
 
-def check_update(repo, timeout=8):
-    if not REPO_RE.match(repo or ""):
-        raise ValueError("репозиторий нужно указать в виде «владелец/имя»")
-    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/latest",
-                                 headers={"User-Agent": "MoiParoli",
-                                          "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    tag = data.get("tag_name", "")
-    return {"version": tag, "newer": parse_version(tag) > parse_version(APP_VERSION),
-            "url": data.get("html_url", ""), "notes": data.get("body", "") or ""}
+def check_update(repo, timeout=8, token=""):
+    from github_updates import check
+    return check(repo, APP_VERSION, timeout, token)
 
 
 # ==========================================================================
@@ -1375,11 +1386,11 @@ def _new_top(app, parent, title):
     top.transient(parent)
     top.resizable(False, False)
     subtitles = {
-        "Генератор паролей": "Создайте уникальный пароль для новой учётной записи.",
-        "Новая запись": "Сохраните доступ и упорядочьте его в хранилище.",
-        "Запись": "Данные аккаунта и параметры доступа.",
-        "Настройки": "Безопасность, быстрый вход и поведение приложения.",
-        "Аудит безопасности": "Проверьте записи, которым требуется внимание.",
+        tr('Генератор паролей'): tr('Создайте уникальный пароль для новой учётной записи.'),
+        tr('Новая запись'): tr('Сохраните доступ и упорядочьте его в хранилище.'),
+        tr('Запись'): tr('Данные аккаунта и параметры доступа.'),
+        tr('Настройки'): tr('Безопасность, быстрый вход и поведение приложения.'),
+        tr('Аудит безопасности'): tr('Проверьте записи, которым требуется внимание.'),
     }
     if title in subtitles:
         header = ttk.Frame(top, padding=(24, 20, 24, 0))
@@ -1460,31 +1471,30 @@ class BrowserDialog:
     def __init__(self,app,parent):
         from browser_identity import EXTENSION_ID
         from browser_registration import register,diagnose
-        top=_new_top(app,parent,"Подключение браузера")
+        top=_new_top(app,parent,tr('Подключение браузера'))
         frame=_scroll_dialog_body(top,24)
-        ttk.Label(frame,text="Браузер и приложение",font=(FF,18,"bold")).pack(anchor="w")
-        ttk.Label(frame,text="Заполняйте поля и сохраняйте новые пароли с подтверждением.",
+        ttk.Label(frame,text=tr('Браузер и приложение'),font=(FF,18,"bold")).pack(anchor="w")
+        ttk.Label(frame,text=tr('Заполняйте поля и сохраняйте новые пароли с подтверждением.'),
                   wraplength=520,foreground=app.t["muted"]).pack(anchor="w",pady=(6,18))
-        ttk.Label(frame,text="Постоянный ID расширения").pack(anchor="w")
+        ttk.Label(frame,text=tr('Постоянный ID расширения')).pack(anchor="w")
         value=tk.StringVar(value=EXTENSION_ID)
         ttk.Entry(frame,textvariable=value,state="readonly",width=48).pack(fill="x",pady=6)
-        ttk.Label(frame,text="В браузере загрузите папку browser_extension из каталога установки. "
-                  "ID должен совпадать с указанным выше. Регистрация выполняется установщиком автоматически.",
+        ttk.Label(frame,text=tr('В браузере загрузите папку browser_extension из каталога установки. ID должен совпадать с указанным выше. Регистрация выполняется установщиком автоматически.'),
                   wraplength=520,foreground=app.t["muted"]).pack(anchor="w",pady=(6,14))
         status=ttk.Label(frame,text="",wraplength=520,justify="left")
         status.pack(fill="x",pady=12)
         def check():
             try:
                 checks=diagnose()
-                names={"Google\\Chrome":"Chrome","Yandex\\YandexBrowser":"Яндекс",
+                names={"Google\\Chrome":"Chrome","Yandex\\YandexBrowser":tr('Яндекс'),
                        "Microsoft\\Edge":"Edge","Chromium":"Chromium"}
                 lines=[]
                 for browser,label in names.items():
                     valid=all(item["ok"] for item in checks if item["browser"]==browser)
-                    lines.append(label+": "+("подключение настроено" if valid else "требуется восстановление"))
+                    lines.append(label+": "+(tr('подключение настроено') if valid else tr('требуется восстановление')))
                 status.config(text="\n".join(lines))
             except (OSError,ValueError):
-                status.config(text="Не удалось проверить подключение.")
+                status.config(text=tr('Не удалось проверить подключение.'))
         def repair():
             folder=os.path.dirname(sys.executable) if getattr(sys,"frozen",False) else os.path.dirname(__file__)
             exe=os.path.join(folder,"browser_host.exe")
@@ -1493,10 +1503,10 @@ class BrowserDialog:
                 register(EXTENSION_ID,exe)
                 check()
             except (OSError,ValueError) as exc:
-                status.config(text="Подключение не восстановлено: "+str(exc))
-        ttk.Button(frame,text="Восстановить подключение",style="Accent.TButton",command=repair).pack(fill="x")
-        ttk.Button(frame,text="Проверить снова",command=check).pack(fill="x",pady=(8,0))
-        ttk.Button(frame,text="Закрыть",command=top.destroy).pack(anchor="e",pady=(16,0))
+                status.config(text=tr('Подключение не восстановлено: ')+str(exc))
+        ttk.Button(frame,text=tr('Восстановить подключение'),style="Accent.TButton",command=repair).pack(fill="x")
+        ttk.Button(frame,text=tr('Проверить снова'),command=check).pack(fill="x",pady=(8,0))
+        ttk.Button(frame,text=tr('Закрыть'),command=top.destroy).pack(anchor="e",pady=(16,0))
         check()
         top.bind("<Escape>",lambda event:top.destroy())
         top.grab_set()
@@ -1506,17 +1516,17 @@ class ConflictDialog:
         self.result = None
         self.choices = {}
         conflicts = snapshot["conflicts"]
-        top = _new_top(app, app.root, "Разрешить конфликты")
+        top = _new_top(app, app.root, tr('Разрешить конфликты'))
         frame = _scroll_dialog_body(top,24)
-        ttk.Label(frame, text="Выберите версию записи", font=(FF, 18, "bold")).pack(anchor="w")
-        ttk.Label(frame, text="Пароли скрыты. Сохранение обеих версий создаёт отдельную запись.",
+        ttk.Label(frame, text=tr('Выберите версию записи'), font=(FF, 18, "bold")).pack(anchor="w")
+        ttk.Label(frame, text=tr('Пароли скрыты. Сохранение обеих версий создаёт отдельную запись.'),
                   wraplength=560, foreground=app.t["muted"]).pack(anchor="w", pady=(5, 18))
         heading = ttk.Label(frame, font=(FF, 12, "bold"))
         heading.pack(anchor="w")
         summary = ttk.Frame(frame)
         summary.pack(fill="x", pady=14)
         labels = []
-        for column, title in enumerate(("На этом компьютере", "В файле на диске")):
+        for column, title in enumerate((tr('На этом компьютере'), tr('В файле на диске'))):
             summary.columnconfigure(column, weight=1, uniform="version")
             panel = ttk.Frame(summary, style="Card.TFrame", padding=16)
             panel.grid(row=0, column=column, sticky="nsew", padx=(0, 8))
@@ -1525,23 +1535,21 @@ class ConflictDialog:
             label.pack(anchor="w", pady=(10, 0))
             labels.append(label)
         choice = tk.StringVar(value="both")
-        for value, text in (("both", "Сохранить обе версии"), ("local", "Оставить локальную"),
-                            ("remote", "Взять версию с диска")):
-            ttk.Radiobutton(frame, text=text, value=value, variable=choice).pack(anchor="w", pady=4)
+        for value, text in (("both", tr('Сохранить обе версии')), ("local", tr('Оставить локальную')),
+                            ("remote", tr('Взять версию с диска'))):
+            ttk.Radiobutton(frame, text=tr(text), value=value, variable=choice).pack(anchor="w", pady=4)
         current = [0]
         def render():
             conflict = conflicts[current[0]]
             entry = conflict["local"] or conflict["remote"] or {}
-            heading.config(text=f'{current[0] + 1} / {len(conflicts)} · {entry.get("title", "Удалённая запись")}')
+            heading.config(text=f"{current[0] + 1} / {len(conflicts)} · {entry.get('title', 'Удалённая запись')}")
             for label, key in zip(labels, ("local", "remote")):
                 entry = conflict[key]
-                text = "Запись удалена" if entry is None else (
-                    f'Логин: {entry.get("login", "")}\nКатегория: {entry.get("category", "")}\n'
-                    f'Изменено: {entry.get("updated", "")}\nВложений: {len(entry.get("attachments", []))}\n'
-                    f'Пароль: {"есть" if entry.get("password") else "отсутствует"}')
-                label.config(text=text)
+                text = tr('Запись удалена') if entry is None else (
+                    f"{tr('Логин: ')}{entry.get('login', '')}{tr('\nКатегория: ')}{entry.get('category', '')}{tr('\nИзменено: ')}{entry.get('updated', '')}{tr('\nВложений: ')}{len(entry.get('attachments', []))}{tr('\nПароль: ')}{('есть' if entry.get('password') else 'отсутствует')}")
+                label.config(text=tr(text))
             choice.set("both")
-            save.config(text="Сохранить решения" if current[0] == len(conflicts)-1 else "Следующая запись")
+            save.config(text=tr('Сохранить решения') if current[0] == len(conflicts)-1 else tr('Следующая запись'))
         def advance():
             self.choices[conflicts[current[0]]["id"]] = choice.get()
             if current[0] + 1 == len(conflicts):
@@ -1552,7 +1560,7 @@ class ConflictDialog:
                 render()
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", pady=(20, 0))
-        ttk.Button(buttons, text="Отмена", command=top.destroy).pack(side="right")
+        ttk.Button(buttons, text=tr('Отмена'), command=top.destroy).pack(side="right")
         save = ttk.Button(buttons, style="Accent.TButton", command=advance)
         save.pack(side="right", padx=8)
         top.bind("<Escape>", lambda event: top.destroy())
@@ -1564,7 +1572,7 @@ class ConflictDialog:
 class GeneratorDialog:
     def __init__(self, app, parent, select=False):
         self.app, self.result = app, None
-        top = self.top = _new_top(app, parent, "Генератор паролей")
+        top = self.top = _new_top(app, parent, tr('Генератор паролей'))
         frm = _scroll_dialog_body(top,24)
         self.out = tk.StringVar()
         ttk.Entry(frm, textvariable=self.out, width=44, font=("Consolas", 11)).grid(
@@ -1574,29 +1582,29 @@ class GeneratorDialog:
         self.lbl = ttk.Label(frm, text="")
         self.lbl.grid(row=1, column=2, sticky="e", padx=(8, 0))
 
-        ttk.Label(frm, text="Длина").grid(row=2, column=0, sticky="w", pady=(12, 0))
+        ttk.Label(frm, text=tr('Длина')).grid(row=2, column=0, sticky="w", pady=(12, 0))
         self.length = tk.IntVar(value=16)
         ttk.Spinbox(frm, from_=8, to=64, textvariable=self.length, width=6,
                     command=self.regen).grid(row=2, column=1, sticky="w", pady=(12, 0))
         self.opts = {}
         for i, (key, text, default) in enumerate((
-                ("lower", "Строчные a–z", True), ("upper", "Заглавные A–Z", True),
-                ("digits", "Цифры 0–9", True), ("symbols", "Символы !@#$…", True),
-                ("ambiguous", "Разрешить похожие (O/0, l/1)", False))):
+                ("lower", tr('Строчные a–z'), True), ("upper", tr('Заглавные A–Z'), True),
+                ("digits", tr('Цифры 0–9'), True), ("symbols", tr('Символы !@#$…'), True),
+                ("ambiguous", tr('Разрешить похожие (O/0, l/1)'), False))):
             var = tk.BooleanVar(value=default)
             self.opts[key] = var
-            ttk.Checkbutton(frm, text=text, variable=var, command=self.regen).grid(
+            ttk.Checkbutton(frm, text=tr(text), variable=var, command=self.regen).grid(
                 row=3 + i, column=0, columnspan=3, sticky="w")
 
         btns = ttk.Frame(frm)
         btns.grid(row=9, column=0, columnspan=3, sticky="e", pady=(14, 0))
-        ttk.Button(btns, text="Обновить", command=self.regen).pack(side="left", padx=4)
-        ttk.Button(btns, text="Копировать", command=self.copy).pack(side="left", padx=4)
+        ttk.Button(btns, text=tr('Обновить'), command=self.regen).pack(side="left", padx=4)
+        ttk.Button(btns, text=tr('Копировать'), command=self.copy).pack(side="left", padx=4)
         if select:
-            ttk.Button(btns, text="Использовать", style="Accent.TButton",
+            ttk.Button(btns, text=tr('Использовать'), style="Accent.TButton",
                        command=self.use).pack(side="left", padx=4)
         else:
-            ttk.Button(btns, text="Закрыть", command=top.destroy).pack(side="left", padx=4)
+            ttk.Button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="left", padx=4)
         top.bind("<Escape>", lambda e: top.destroy())
         self.regen()
         top.grab_set()
@@ -1610,17 +1618,17 @@ class GeneratorDialog:
         try:
             pw = generate_password(length, **{k: v.get() for k, v in self.opts.items()})
         except ValueError:
-            messagebox.showwarning(APP_NAME, "Выберите хотя бы один тип символов.", parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), tr('Выберите хотя бы один тип символов.'), parent=self.top)
             self.opts["lower"].set(True)
             return
         self.out.set(pw)
         bits, text, level = strength(pw)
         self.bar["value"] = min(100, bits)
         self.bar.configure(style=f"{LEVEL_STYLE[level]}.Horizontal.TProgressbar")
-        self.lbl.config(text=text)
+        self.lbl.config(text=tr(text))
 
     def copy(self):
-        self.app.copy_text(self.out.get(), "Пароль")
+        self.app.copy_text(self.out.get(), tr('Пароль'))
 
     def use(self):
         self.result = self.out.get()
@@ -1633,25 +1641,25 @@ class EntryDialog:
         t = app.t
         is_new = not entry
         entry = entry or {}
-        top = self.top = _new_top(app, parent, "Новая запись" if is_new else "Запись")
+        top = self.top = _new_top(app, parent, tr('Новая запись') if is_new else tr('Запись'))
         frm = _scroll_dialog_body(top,16)
         self.vars = {}
         r = 0
 
         def label(row, text):
-            ttk.Label(frm, text=text).grid(row=row, column=0, sticky="nw", pady=5, padx=(0, 12))
+            ttk.Label(frm, text=tr(text)).grid(row=row, column=0, sticky="nw", pady=5, padx=(0, 12))
 
         if is_new:
-            label(r, "Шаблон")
-            self.tpl = tk.StringVar(value="Пустая запись")
-            cb = ttk.Combobox(frm, textvariable=self.tpl, values=list(TEMPLATES),
+            label(r, tr('Шаблон'))
+            self.tpl = tk.StringVar(value=tr('Пустая запись'))
+            cb = ttk.Combobox(frm, textvariable=self.tpl, values=[tr(name) for name in TEMPLATES],
                               state="readonly", width=36)
             cb.grid(row=r, column=1, sticky="we")
             cb.bind("<<ComboboxSelected>>", self._apply_template)
             r += 1
         pw_row = None
-        for key, text, show in (("title", "Сервис / название *", ""), ("url", "Адрес сайта", ""),
-                                ("login", "Логин / e-mail", ""), ("password", "Пароль", "•")):
+        for key, text, show in (("title", tr('Сервис / название *'), ""), ("url", tr('Адрес сайта'), ""),
+                                ("login", tr('Логин / e-mail'), ""), ("password", tr('Пароль'), "•")):
             label(r, text)
             self.vars[key] = tk.StringVar(value=entry.get(key, ""))
             e = ttk.Entry(frm, textvariable=self.vars[key], width=38, show=show)
@@ -1662,9 +1670,9 @@ class EntryDialog:
                 self.pw_entry, pw_row = e, r
             r += 1
         self.show_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(frm, text="Показать", variable=self.show_var,
+        ttk.Checkbutton(frm, text=tr('Показать'), variable=self.show_var,
                         command=self._toggle).grid(row=pw_row, column=2, padx=(8, 0), sticky="w")
-        ttk.Button(frm, text="Генератор…", command=self._generate).grid(
+        ttk.Button(frm, text=tr('Генератор…'), command=self._generate).grid(
             row=pw_row, column=3, padx=(4, 0))
         self.bar = ttk.Progressbar(frm, maximum=100)
         self.bar.grid(row=r, column=1, sticky="we", pady=(0, 2))
@@ -1674,23 +1682,23 @@ class EntryDialog:
         self._strength()
         r += 1
 
-        label(r, "Ключ 2FA (TOTP)")
+        label(r, tr('Ключ 2FA (TOTP)'))
         self.vars["totp"] = tk.StringVar(value=entry.get("totp", ""))
         ttk.Entry(frm, textvariable=self.vars["totp"], width=38).grid(row=r, column=1, sticky="we")
-        ttk.Label(frm, text="секрет или otpauth://", foreground=t["muted"]).grid(
+        ttk.Label(frm, text=tr('секрет или otpauth://'), foreground=t["muted"]).grid(
             row=r, column=2, columnspan=2, sticky="w", padx=(8, 0))
         r += 1
-        label(r, "Категория")
+        label(r, tr('Категория'))
         self.vars["category"] = tk.StringVar(value=entry.get("category", category))
         ttk.Combobox(frm, textvariable=self.vars["category"], values=app.vault.categories(),
                      width=36).grid(row=r, column=1, sticky="we")
         r += 1
-        label(r, "Теги (через запятую)")
+        label(r, tr('Теги (через запятую)'))
         self.vars["tags"] = tk.StringVar(value=entry.get("tags", ""))
         ttk.Entry(frm, textvariable=self.vars["tags"], width=38).grid(row=r, column=1, sticky="we")
         r += 1
         self.fav = tk.BooleanVar(value=entry.get("favorite", False))
-        ttk.Checkbutton(frm, text="★ Избранное", variable=self.fav).grid(
+        ttk.Checkbutton(frm, text=tr('★ Избранное'), variable=self.fav).grid(
             row=r, column=1, sticky="w", pady=4)
         r += 1
 
@@ -1705,24 +1713,25 @@ class EntryDialog:
                     row=row + 1, column=1, columnspan=3, sticky="w")
             return box
 
-        self.fields = textbox(r, 3, "Доп. поля", "по строке: «Название = значение», секретные — «Название* = значение»")
+        self.fields = textbox(r, 3, tr('Доп. поля'), tr('по строке: «Название = значение», секретные — «Название* = значение»'))
         self.fields.insert("1.0", format_fields(entry.get("fields", [])))
         r += 2
-        self.note = textbox(r, 3, "Заметка")
+        self.note = textbox(r, 3, tr('Заметка'))
         self.note.insert("1.0", entry.get("note", ""))
         r += 1
 
         btns = ttk.Frame(frm)
         btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(14, 0))
-        ttk.Button(btns, text="Сохранить", style="Accent.TButton", command=self._ok).pack(
+        ttk.Button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self._ok).pack(
             side="left", padx=4)
-        ttk.Button(btns, text="Отмена", command=top.destroy).pack(side="left")
+        ttk.Button(btns, text=tr('Отмена'), command=top.destroy).pack(side="left")
         top.bind("<Escape>", lambda e: top.destroy())
         top.grab_set()
         parent.wait_window(top)
 
     def _apply_template(self, _=None):
-        tpl = TEMPLATES.get(self.tpl.get(), {})
+        name=next((key for key in TEMPLATES if tr(key)==self.tpl.get()),self.tpl.get())
+        tpl = TEMPLATES.get(name, {})
         if tpl.get("category") and not self.vars["category"].get().strip():
             self.vars["category"].set(tpl["category"])
         if tpl.get("fields") and not self.fields.get("1.0", "end").strip():
@@ -1736,7 +1745,7 @@ class EntryDialog:
         bits, text, level = strength(self.vars["password"].get())
         self.bar["value"] = min(100, bits)
         self.bar.configure(style=f"{LEVEL_STYLE[level]}.Horizontal.TProgressbar")
-        self.bar_lbl.config(text=text)
+        self.bar_lbl.config(text=tr(text))
 
     def _generate(self):
         pw = GeneratorDialog(self.app, self.top, select=True).result
@@ -1748,15 +1757,14 @@ class EntryDialog:
     def _ok(self):
         title = self.vars["title"].get().strip()
         if not title:
-            messagebox.showwarning(APP_NAME, "Укажите название сервиса.", parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), tr('Укажите название сервиса.'), parent=self.top)
             return
         totp = self.vars["totp"].get().strip()
         if totp:
             try:
                 totp_now(totp)
             except Exception:
-                messagebox.showwarning(APP_NAME, "Ключ 2FA не распознан. Нужна строка base32 "
-                                       "(буквы A–Z и цифры 2–7) или ссылка otpauth://.",
+                messagebox.showwarning(tr(APP_NAME), tr('Ключ 2FA не распознан. Нужна строка base32 (буквы A–Z и цифры 2–7) или ссылка otpauth://.'),
                                        parent=self.top)
                 return
         self.result = {
@@ -1778,18 +1786,18 @@ class AuditDialog:
     def __init__(self, app, parent):
         self.chosen = None
         issues = app.vault.audit()
-        top = self.top = _new_top(app, parent, "Аудит безопасности")
+        top = self.top = _new_top(app, parent, tr('Аудит безопасности'))
         top.resizable(True, True)
         frm = ttk.Frame(top, padding=14)
         frm.pack(fill="both", expand=True)
         total = len(app.vault.active())
-        head = (f"Проверено записей: {total}. Найдено проблем: {len(issues)}."
-                if issues else f"Проверено записей: {total}. Проблем не найдено 👍")
+        head = (f"{tr('Проверено записей: ')}{total}{tr('. Найдено проблем: ')}{len(issues)}."
+                if issues else f"{tr('Проверено записей: ')}{total}{tr('. Проблем не найдено 👍')}")
         ttk.Label(frm, text=head, font=(FF, 11, "bold")).pack(anchor="w", pady=(0, 8))
         cols = ("issue", "title", "login")
         self.tree = ttk.Treeview(frm, columns=cols, show="headings", height=14)
-        for c, name, w in (("issue", "Проблема", 230), ("title", "Сервис", 200), ("login", "Логин", 200)):
-            self.tree.heading(c, text=name)
+        for c, name, w in (("issue", tr('Проблема'), 230), ("title", tr('Сервис'), 200), ("login", tr('Логин'), 200)):
+            self.tree.heading(c, text=tr(name))
             self.tree.column(c, width=w, anchor="w")
         self.ids = {}
         for i, (text, e) in enumerate(issues):
@@ -1797,7 +1805,7 @@ class AuditDialog:
             self.ids[iid] = e["id"]
             self.tree.insert("", "end", iid=iid, values=(text, e["title"], e["login"]))
         self.tree.pack(fill="both", expand=True)
-        ttk.Label(frm, text="Двойной клик — перейти к записи", foreground=app.t["muted"]).pack(
+        ttk.Label(frm, text=tr('Двойной клик — перейти к записи'), foreground=app.t["muted"]).pack(
             anchor="w", pady=(6, 0))
         self.tree.bind("<Double-1>", self._pick)
         top.bind("<Escape>", lambda e: top.destroy())
@@ -1814,20 +1822,20 @@ class AuditDialog:
 class HistoryDialog:
     def __init__(self, app, parent, entry):
         self.app, self.entry, self.show = app, entry, False
-        top = self.top = _new_top(app, parent, "История паролей — " + entry["title"])
+        top = self.top = _new_top(app, parent, tr('История паролей — ') + entry["title"])
         frm = ttk.Frame(top, padding=14)
         frm.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(frm, columns=("date", "pw"), show="headings", height=8)
-        self.tree.heading("date", text="Заменён")
-        self.tree.heading("pw", text="Прежний пароль")
+        self.tree.heading("date", text=tr('Заменён'))
+        self.tree.heading("pw", text=tr('Прежний пароль'))
         self.tree.column("date", width=150)
         self.tree.column("pw", width=260)
         self.tree.pack(fill="both", expand=True)
         btns = ttk.Frame(frm)
         btns.pack(fill="x", pady=(10, 0))
-        ttk.Button(btns, text="Показать/скрыть", command=self._toggle).pack(side="left")
-        ttk.Button(btns, text="Копировать", command=self._copy).pack(side="left", padx=6)
-        ttk.Button(btns, text="Закрыть", command=top.destroy).pack(side="right")
+        ttk.Button(btns, text=tr('Показать/скрыть'), command=self._toggle).pack(side="left")
+        ttk.Button(btns, text=tr('Копировать'), command=self._copy).pack(side="left", padx=6)
+        ttk.Button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="right")
         self._fill()
         top.bind("<Escape>", lambda e: top.destroy())
         top.grab_set()
@@ -1846,53 +1854,67 @@ class HistoryDialog:
     def _copy(self):
         sel = self.tree.selection()
         if sel:
-            self.app.copy_text(self.entry["history"][int(sel[0])]["password"], "Пароль")
+            self.app.copy_text(self.entry["history"][int(sel[0])]["password"], tr('Пароль'))
 
 
 class SettingsDialog:
-    FLAGS = (("lock_on_minimize", "Блокировать при сворачивании окна"),
-             ("lock_on_session_lock", "Блокировать при блокировке Windows (Win+L)"),
-             ("close_to_tray", "Кнопка ✕ сворачивает в трей, а не закрывает"),
-             ("hotkey_enabled", "Быстрый поиск по глобальной горячей клавише"),
-             ("protect_capture", "Скрывать окно от скриншотов и записи экрана"),
-             ("autotype_enter", "После автоввода нажимать Enter"),
-             ("check_updates", "Проверять обновления при запуске"))
+    FLAGS = (("lock_on_minimize", tr('Блокировать при сворачивании окна')),
+             ("lock_on_session_lock", tr('Блокировать при блокировке Windows (Win+L)')),
+             ("close_to_tray", tr('Кнопка ✕ сворачивает в трей, а не закрывает')),
+             ("hotkey_enabled", tr('Быстрый поиск по глобальной горячей клавише')),
+             ("protect_capture", tr('Скрывать окно от скриншотов и записи экрана')),
+             ("autotype_enter", tr('После автоввода нажимать Enter')),
+             ("check_updates", tr('Проверять обновления при запуске')),
+             ("animations", tr('Анимация входа')))
 
     def __init__(self, app, parent):
         s = app.settings
         self.app = app
-        top = self.top = _new_top(app, parent, "Настройки")
+        top = self.top = _new_top(app, parent, tr('Настройки'))
         frm = _scroll_dialog_body(top,20)
         self.idle = tk.IntVar(value=s.get("idle_minutes"))
         self.clip = tk.IntVar(value=s.get("clipboard_seconds"))
         self.hotkey = tk.StringVar(value=s.get("hotkey"))
-        self.repo = tk.StringVar(value=s.get("update_repo"))
+        self.repo = tk.StringVar(value=s.get("update_repo") or "userArturM/Moipar-")
+        self.language=tk.StringVar(value="English" if s.get("language")=="en" else tr('Русский'))
+        self.token=tk.StringVar()
         self.flags = {k: tk.BooleanVar(value=bool(s.get(k))) for k, _ in self.FLAGS}
-        hello_button = ttk.Button(frm, text="Windows Hello: включить / отключить",
+        hello_button = ttk.Button(frm, text=tr('Windows Hello: включить / отключить'),
                                   command=self._configure_hello)
-        ttk.Label(frm, text="Блокировать через (мин) бездействия").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(frm, text=tr('Блокировать через (мин) бездействия')).grid(row=0, column=0, sticky="w", pady=5)
         ttk.Spinbox(frm, from_=1, to=120, textvariable=self.idle, width=6).grid(row=0, column=1, sticky="w", padx=12)
-        ttk.Label(frm, text="Очищать буфер обмена через (сек)").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(frm, text=tr('Очищать буфер обмена через (сек)')).grid(row=1, column=0, sticky="w", pady=5)
         ttk.Spinbox(frm, from_=5, to=300, textvariable=self.clip, width=6).grid(row=1, column=1, sticky="w", padx=12)
-        ttk.Label(frm, text="Горячая клавиша быстрого поиска").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Label(frm, text=tr('Горячая клавиша быстрого поиска')).grid(row=2, column=0, sticky="w", pady=5)
         ttk.Combobox(frm, textvariable=self.hotkey, width=18,
                      values=("Ctrl+Alt+P", "Ctrl+Alt+Space", "Ctrl+Shift+Space", "Ctrl+Alt+L")).grid(
             row=2, column=1, sticky="w", padx=12)
         for i, (key, text) in enumerate(self.FLAGS, start=3):
-            ttk.Checkbutton(frm, text=text, variable=self.flags[key]).grid(
+            ttk.Checkbutton(frm, text=tr(text), variable=self.flags[key]).grid(
                 row=i, column=0, columnspan=2, sticky="w", pady=2)
         row = 3 + len(self.FLAGS)
-        ttk.Label(frm, text="Репозиторий GitHub для обновлений").grid(row=row, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(frm, text=tr('Репозиторий GitHub для обновлений')).grid(row=row, column=0, sticky="w", pady=(10, 0))
         ttk.Entry(frm, textvariable=self.repo, width=24).grid(row=row, column=1, sticky="w", padx=12, pady=(10, 0))
-        ttk.Label(frm, text="например: ivan/moi-paroli", foreground=app.t["muted"], font=(FF, 8)).grid(
+        ttk.Label(frm, text=tr('например: ivan/moi-paroli'), foreground=app.t["muted"], font=(FF, 8)).grid(
             row=row + 1, column=1, sticky="w", padx=12)
         hello_button.grid(row=row + 2, column=0, columnspan=2, sticky="ew", pady=(12, 6))
         btns = ttk.Frame(frm)
-        btns.grid(row=row + 3, column=0, columnspan=2, sticky="e", pady=(14, 0))
-        ttk.Button(btns, text="Сохранить", style="Accent.TButton", command=self.save).pack(side="left", padx=4)
-        ttk.Button(btns, text="Отмена", command=top.destroy).pack(side="left")
+        ttk.Label(frm,text=tr('Язык / Language')).grid(row=row+3,column=0,sticky="w",pady=8)
+        ttk.Combobox(frm,textvariable=self.language,values=(tr('Русский'),"English"),state="readonly",width=20).grid(row=row+3,column=1)
+        ttk.Label(frm,text=tr('Токен GitHub (приватный репозиторий)')).grid(row=row+4,column=0,sticky="w",pady=8)
+        ttk.Entry(frm,textvariable=self.token,show="•",width=24).grid(row=row+4,column=1)
+        ttk.Label(frm,text=tr('Пустое поле сохраняет прежний токен. Защищён Windows DPAPI.'),wraplength=440).grid(row=row+5,column=0,columnspan=2,sticky="w")
+        ttk.Button(frm,text=tr('Удалить токен'),command=self.clear_token).grid(row=row+6,column=0,sticky="w",pady=8)
+        btns.grid(row=row + 7, column=0, columnspan=2, sticky="e", pady=(14, 0))
+        ttk.Button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self.save).pack(side="left", padx=4)
+        ttk.Button(btns, text=tr('Отмена'), command=top.destroy).pack(side="left")
         top.grab_set()
         parent.wait_window(top)
+
+    def clear_token(self):
+        from github_updates import save_token
+        save_token(data_dir(),"")
+        self.token.set("")
 
     def _configure_hello(self):
         self.top.grab_release()
@@ -1908,18 +1930,24 @@ class SettingsDialog:
         try:
             idle, clip = max(1, int(self.idle.get())), max(5, int(self.clip.get()))
         except Exception:
-            messagebox.showwarning(APP_NAME, "Введите числа.", parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), tr('Введите числа.'), parent=self.top)
             return
         hk = self.hotkey.get().strip()
         try:
             parse_hotkey(hk)
         except ValueError as ex:
-            messagebox.showwarning(APP_NAME, f"Горячая клавиша: {ex}", parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), f"{tr('Горячая клавиша: ')}{ex}", parent=self.top)
             return
         repo = self.repo.get().strip()
         if repo and not REPO_RE.match(repo):
-            messagebox.showwarning(APP_NAME, "Репозиторий нужно указать как «владелец/имя».", parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), tr('Репозиторий нужно указать как «владелец/имя».'), parent=self.top)
             return
+        if self.token.get().strip():
+            from github_updates import save_token
+            try: save_token(data_dir(),self.token.get().strip())
+            except (OSError,ValueError) as exc:
+                messagebox.showerror(tr(APP_NAME),tr('Не удалось сохранить токен GitHub.'),parent=self.top)
+                return
         s.set("idle_minutes", idle)
         s.set("clipboard_seconds", clip)
         s.set("hotkey", hk)
@@ -1928,29 +1956,30 @@ class SettingsDialog:
             s.set(k, bool(v.get()))
         self.app.apply_settings()
         self.top.destroy()
+        self.app.set_language("en" if self.language.get()=="English" else "ru")
 
 
 class AttachmentsDialog:
     def __init__(self, app, parent, entry_id):
         self.app, self.eid = app, entry_id
         e = app.vault.get(entry_id)
-        top = self.top = _new_top(app, parent, "Вложения — " + e["title"])
+        top = self.top = _new_top(app, parent, tr('Вложения — ') + e["title"])
         frm = ttk.Frame(top, padding=14)
         frm.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(frm, columns=("name", "size"), show="headings", height=8)
-        self.tree.heading("name", text="Файл")
-        self.tree.heading("size", text="Размер")
+        self.tree.heading("name", text=tr('Файл'))
+        self.tree.heading("size", text=tr('Размер'))
         self.tree.column("name", width=300)
         self.tree.column("size", width=100, anchor="e")
         self.tree.pack(fill="both", expand=True)
-        ttk.Label(frm, text="Файлы хранятся внутри зашифрованного хранилища. Максимум 3 МБ на файл.",
+        ttk.Label(frm, text=tr('Файлы хранятся внутри зашифрованного хранилища. Максимум 3 МБ на файл.'),
                   foreground=app.t["muted"]).pack(anchor="w", pady=(6, 0))
         btns = ttk.Frame(frm)
         btns.pack(fill="x", pady=(10, 0))
-        ttk.Button(btns, text="Добавить…", style="Accent.TButton", command=self.add).pack(side="left")
-        ttk.Button(btns, text="Сохранить как…", command=self.save_as).pack(side="left", padx=6)
-        ttk.Button(btns, text="Удалить", command=self.remove).pack(side="left")
-        ttk.Button(btns, text="Закрыть", command=top.destroy).pack(side="right")
+        ttk.Button(btns, text=tr('Добавить…'), style="Accent.TButton", command=self.add).pack(side="left")
+        ttk.Button(btns, text=tr('Сохранить как…'), command=self.save_as).pack(side="left", padx=6)
+        ttk.Button(btns, text=tr('Удалить'), command=self.remove).pack(side="left")
+        ttk.Button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="right")
         self._fill()
         top.bind("<Escape>", lambda ev: top.destroy())
         top.grab_set()
@@ -1958,7 +1987,7 @@ class AttachmentsDialog:
 
     @staticmethod
     def _size(n):
-        return f"{n / 1024:.0f} КБ" if n < 1024 * 1024 else f"{n / 1024 / 1024:.1f} МБ"
+        return f"{n / 1024:.0f}{tr(' КБ')}" if n < 1024 * 1024 else f"{n / 1024 / 1024:.1f}{tr(' МБ')}"
 
     def _fill(self):
         self.tree.delete(*self.tree.get_children())
@@ -1967,14 +1996,14 @@ class AttachmentsDialog:
             self.tree.insert("", "end", iid=a["id"], values=(a["name"], self._size(a["size"])))
 
     def add(self):
-        path = filedialog.askopenfilename(parent=self.top, title="Выберите файл")
+        path = filedialog.askopenfilename(parent=self.top, title=tr('Выберите файл'))
         if not path:
             return
         try:
             with open(path, "rb") as f:
                 data = f.read()
         except OSError as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось прочитать файл:\n{ex}", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{ex}", parent=self.top)
             return
         ok, _ = self.app._do(self.app.vault.add_attachment, self.eid, os.path.basename(path), data)
         if ok:
@@ -1995,13 +2024,13 @@ class AttachmentsDialog:
             try:
                 with open(path, "wb") as f:
                     f.write(data)
-                messagebox.showinfo(APP_NAME, "Файл сохранён.", parent=self.top)
+                messagebox.showinfo(tr(APP_NAME), tr('Файл сохранён.'), parent=self.top)
             except OSError as ex:
-                messagebox.showerror(APP_NAME, f"Ошибка: {ex}", parent=self.top)
+                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.top)
 
     def remove(self):
         sel = self.tree.selection()
-        if sel and messagebox.askyesno(APP_NAME, "Удалить вложение?", parent=self.top):
+        if sel and messagebox.askyesno(tr(APP_NAME), tr('Удалить вложение?'), parent=self.top):
             ok, _ = self.app._do(self.app.vault.remove_attachment, self.eid, sel[0])
             if ok:
                 self._fill()
@@ -2015,11 +2044,11 @@ class BreachDialog:
         self.app, self.chosen = app, None
         self.entries = [e for e in app.vault.active() if e["password"]]
         self.unique = sorted({e["password"] for e in self.entries})
-        top = self.top = _new_top(app, parent, "Проверка на утечки")
+        top = self.top = _new_top(app, parent, tr('Проверка на утечки'))
         top.resizable(True, True)
         self.frm = ttk.Frame(top, padding=16)
         self.frm.pack(fill="both", expand=True)
-        self.lbl = ttk.Label(self.frm, text=f"Проверено 0 из {len(self.unique)}…", font=(FF, 11, "bold"))
+        self.lbl = ttk.Label(self.frm, text=f"{tr('Проверено 0 из ')}{len(self.unique)}…", font=(FF, 11, "bold"))
         self.lbl.pack(anchor="w")
         self.bar = ttk.Progressbar(self.frm, maximum=max(1, len(self.unique)), length=420)
         self.bar.pack(fill="x", pady=10)
@@ -2055,9 +2084,9 @@ class BreachDialog:
                 kind, val = self.q.get_nowait()
                 if kind == "progress":
                     self.bar["value"] = val
-                    self.lbl.config(text=f"Проверено {val} из {len(self.unique)}…")
+                    self.lbl.config(text=f"{tr('Проверено ')}{val}{tr(' из ')}{len(self.unique)}…")
                 elif kind == "error":
-                    messagebox.showwarning(APP_NAME, f"Не удалось проверить (нужен интернет):\n{val}",
+                    messagebox.showwarning(tr(APP_NAME), f"{tr('Не удалось проверить (нужен интернет):\n')}{val}",
                                            parent=self.top)
                     self._close()
                     return
@@ -2076,20 +2105,20 @@ class BreachDialog:
         self.bar.pack_forget()
         bad = [(e, res.get(e["password"], 0)) for e in self.entries if res.get(e["password"], 0) > 0]
         if not bad:
-            self.lbl.config(text="Ваших паролей в известных утечках не найдено 👍")
-            ttk.Button(self.frm, text="Закрыть", command=self._close).pack(anchor="e", pady=(12, 0))
+            self.lbl.config(text=tr('Ваших паролей в известных утечках не найдено 👍'))
+            ttk.Button(self.frm, text=tr('Закрыть'), command=self._close).pack(anchor="e", pady=(12, 0))
             return
-        self.lbl.config(text=f"Найдено в утечках: {len(bad)}. Смените эти пароли.")
+        self.lbl.config(text=f"{tr('Найдено в утечках: ')}{len(bad)}{tr('. Смените эти пароли.')}")
         tree = ttk.Treeview(self.frm, columns=("title", "login", "n"), show="headings", height=12)
-        for c, name, w in (("title", "Сервис", 200), ("login", "Логин", 180), ("n", "Встречается раз", 120)):
-            tree.heading(c, text=name)
+        for c, name, w in (("title", tr('Сервис'), 200), ("login", tr('Логин'), 180), ("n", tr('Встречается раз'), 120)):
+            tree.heading(c, text=tr(name))
             tree.column(c, width=w, anchor="w")
         ids = {}
         for e, n in sorted(bad, key=lambda x: -x[1]):
             tree.insert("", "end", iid=e["id"], values=(e["title"], e["login"], f"{n:,}".replace(",", " ")))
             ids[e["id"]] = e["id"]
         tree.pack(fill="both", expand=True)
-        ttk.Label(self.frm, text="Двойной клик — перейти к записи", foreground=self.app.t["muted"]).pack(
+        ttk.Label(self.frm, text=tr('Двойной клик — перейти к записи'), foreground=self.app.t["muted"]).pack(
             anchor="w", pady=(6, 0))
 
         def pick(_=None):
@@ -2104,34 +2133,31 @@ class KeyfileDialog:
     def __init__(self, app, parent):
         self.app = app
         v = app.vault
-        top = self.top = _new_top(app, parent, "Ключевой файл")
+        top = self.top = _new_top(app, parent, tr('Ключевой файл'))
         frm = ttk.Frame(top, padding=20)
         frm.pack()
-        ttk.Label(frm, text="Ключевой файл сейчас " + ("ВКЛЮЧЁН" if v.uses_keyfile else "выключен"),
+        ttk.Label(frm, text=tr('Ключевой файл сейчас ') + (tr('ВКЛЮЧЁН') if v.uses_keyfile else tr('выключен')),
                   font=(FF, 12, "bold")).pack(anchor="w")
         ttk.Label(frm, wraplength=440, justify="left", foreground=app.t["muted"], text=(
-            "Ключевой файл — второй «ключ» к хранилищу. Для входа понадобятся и мастер-пароль, "
-            "и этот файл (его удобно держать на флешке). Украв пароль или файл по отдельности, "
-            "хранилище не открыть.\n\nВНИМАНИЕ: если потерять ключевой файл, данные восстановить "
-            "невозможно, в том числе из резервных копий. Сразу сделайте копию файла в надёжном месте.")
+            tr('Ключевой файл — второй «ключ» к хранилищу. Для входа понадобятся и мастер-пароль, и этот файл (его удобно держать на флешке). Украв пароль или файл по отдельности, хранилище не открыть.\n\nВНИМАНИЕ: если потерять ключевой файл, данные восстановить невозможно, в том числе из резервных копий. Сразу сделайте копию файла в надёжном месте.'))
                   ).pack(anchor="w", pady=12)
         if v.uses_keyfile:
-            ttk.Button(frm, text="Выключить ключевой файл", command=self.disable).pack(fill="x", pady=3)
+            ttk.Button(frm, text=tr('Выключить ключевой файл'), command=self.disable).pack(fill="x", pady=3)
         else:
-            ttk.Button(frm, text="Создать новый ключевой файл и включить…", style="Accent.TButton",
+            ttk.Button(frm, text=tr('Создать новый ключевой файл и включить…'), style="Accent.TButton",
                        command=self.create).pack(fill="x", pady=3)
-            ttk.Button(frm, text="Включить с уже имеющимся файлом…", command=self.existing).pack(fill="x", pady=3)
-        ttk.Button(frm, text="Закрыть", command=top.destroy).pack(fill="x", pady=(10, 0))
+            ttk.Button(frm, text=tr('Включить с уже имеющимся файлом…'), command=self.existing).pack(fill="x", pady=3)
+        ttk.Button(frm, text=tr('Закрыть'), command=top.destroy).pack(fill="x", pady=(10, 0))
         top.grab_set()
         parent.wait_window(top)
 
     def _password(self):
-        pw = simpledialog.askstring(APP_NAME, "Введите мастер-пароль для подтверждения:",
+        pw = simpledialog.askstring(APP_NAME, tr('Введите мастер-пароль для подтверждения:'),
                                     show="•", parent=self.top)
         if not pw:
             return None
         if not self.app.vault.verify_password(pw):
-            messagebox.showerror(APP_NAME, "Неверный мастер-пароль.", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), tr('Неверный мастер-пароль.'), parent=self.top)
             return None
         return pw
 
@@ -2140,7 +2166,7 @@ class KeyfileDialog:
         if not pw:
             return
         path = filedialog.asksaveasfilename(parent=self.top, defaultextension=".key",
-                                            title="Куда сохранить ключевой файл (лучше на флешку)",
+                                            title=tr('Куда сохранить ключевой файл (лучше на флешку)'),
                                             initialfile="moi-paroli.key")
         if not path:
             return
@@ -2149,7 +2175,7 @@ class KeyfileDialog:
             with open(path, "wb") as f:
                 f.write(content)
         except OSError as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось сохранить файл:\n{ex}", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить файл:\n')}{ex}", parent=self.top)
             return
         self._apply(pw, content, path)
 
@@ -2157,23 +2183,23 @@ class KeyfileDialog:
         pw = self._password()
         if not pw:
             return
-        path = filedialog.askopenfilename(parent=self.top, title="Выберите ключевой файл")
+        path = filedialog.askopenfilename(parent=self.top, title=tr('Выберите ключевой файл'))
         if not path:
             return
         try:
             with open(path, "rb") as f:
                 content = f.read()
         except OSError as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось прочитать файл:\n{ex}", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{ex}", parent=self.top)
             return
         if not content:
-            messagebox.showerror(APP_NAME, "Файл пустой.", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), tr('Файл пустой.'), parent=self.top)
             return
         self._apply(pw, content, path)
 
     def disable(self):
         pw = self._password()
-        if pw and messagebox.askyesno(APP_NAME, "Выключить ключевой файл? Вход будет только по паролю.",
+        if pw and messagebox.askyesno(tr(APP_NAME), tr('Выключить ключевой файл? Вход будет только по паролю.'),
                                       parent=self.top):
             self._apply(pw, None, "")
 
@@ -2181,8 +2207,8 @@ class KeyfileDialog:
         ok, _ = self.app._do(self.app.vault.set_keyfile, pw, content)
         if ok:
             self.app.settings.set("keyfile_path", path)
-            messagebox.showinfo(APP_NAME, "Готово. Хранилище пересохранено." + (
-                "\nНе потеряйте ключевой файл!" if content else ""), parent=self.top)
+            messagebox.showinfo(tr(APP_NAME), tr('Готово. Хранилище пересохранено.') + (
+                tr('\nНе потеряйте ключевой файл!') if content else ""), parent=self.top)
             self.top.destroy()
 
 
@@ -2207,8 +2233,7 @@ class QuickSearch:
                              selectforeground=t["fg"], activestyle="none", relief="flat",
                              highlightthickness=0, borderwidth=0, font=(FF, 11))
         self.lb.pack(fill="both", expand=True, pady=(10, 6))
-        ttk.Label(inner, style="Muted.TLabel", text="Enter — пароль   Shift+Enter — логин   "
-                  "Ctrl+Enter — ввести в окно   Esc — закрыть").pack(anchor="w")
+        ttk.Label(inner, style="Muted.TLabel", text=tr('Enter — пароль   Shift+Enter — логин   Ctrl+Enter — ввести в окно   Esc — закрыть')).pack(anchor="w")
         self.var.trace_add("write", lambda *a: self._filter())
         for widget in (top, self.entry, self.lb):
             widget.bind("<Return>", lambda e: self._act("pw"))
@@ -2267,9 +2292,9 @@ class QuickSearch:
         if not e:
             return "break"
         if what == "pw":
-            self.app.copy_text(e["password"], "Пароль")
+            self.app.copy_text(e["password"], tr('Пароль'))
         elif what == "login":
-            self.app.copy_text(e["login"], "Логин")
+            self.app.copy_text(e["login"], tr('Логин'))
         else:
             self.app.autotype_entry(e, self.prev)
         return "break"
@@ -2286,13 +2311,17 @@ class QuickSearch:
 #  Главное приложение
 # ==========================================================================
 class App:
-    COLUMNS = (("fav", "★", 38), ("title", "Сервис", 200), ("login", "Логин", 180),
-               ("category", "Категория", 130), ("updated", "Изменено", 100))
+    COLUMNS = (("fav", "★", 38), ("title", tr('Сервис'), 200), ("login", tr('Логин'), 180),
+               ("category", tr('Категория'), 130), ("updated", tr('Изменено'), 100))
 
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(APP_NAME)
         self.settings = Settings(os.path.join(data_dir(), "settings.json"))
+        import localization
+        localization.install()
+        localization.set_language(self.settings.get("language"))
+        self.root.title(tr(APP_NAME))
         vp = self.settings.get("vault_path")
         self.vault = Vault(vp if vp else os.path.join(data_dir(), "vault.dat"))
         self.vault.backup_dir = os.path.join(data_dir(), "backups")
@@ -2310,10 +2339,13 @@ class App:
             self.icon = tk.PhotoImage(data=ICON_B64)
             self.logo = self.icon.subsample(2)
             self.root.iconphoto(True, self.icon)
+            icon_path=os.path.join(getattr(sys,"_MEIPASS",os.path.dirname(__file__)),"icon.ico")
+            if IS_WIN and os.path.isfile(icon_path): self.root.iconbitmap(icon_path)
         except tk.TclError:
             pass
         self.frame = None
         self.last_activity = time.time()
+        self._animation_id = None
         self.cat_filter = "all"
         self.sort = ("title", False)
         self.pw_visible = False
@@ -2332,6 +2364,7 @@ class App:
         self.apply_capture()
         self._start_services()
         self.show_login()
+        self.animate_entry()
         if self.settings.get("check_updates") and self.settings.get("update_repo"):
             self.root.after(3000, lambda: self.check_updates(manual=False))
 
@@ -2511,11 +2544,10 @@ class App:
         try:
             changed = self.vault.sync_from_disk()
         except SyncConflict:
-            self.set_status("Конфликт записей: Инструменты → Разрешить конфликты", self.t["warn"])
+            self.set_status(tr('Конфликт записей: Инструменты → Разрешить конфликты'), self.t["warn"])
             return
         except KeyChanged:
-            messagebox.showwarning(APP_NAME, "Хранилище изменено на другом устройстве с другим "
-                                   "мастер-паролем или ключевым файлом.\nВойдите заново.", parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), tr('Хранилище изменено на другом устройстве с другим мастер-паролем или ключевым файлом.\nВойдите заново.'), parent=self.root)
             self.lock()
             return
         except (VaultError, OSError):
@@ -2523,13 +2555,13 @@ class App:
         if changed:
             self.vault.merged = False
             self.refresh_all()
-            self.set_status("↻ Подтянуты изменения с другого устройства", self.t["warn"])
+            self.set_status(tr('↻ Подтянуты изменения с другого устройства'), self.t["warn"])
 
     def _after_merge(self):
         if self.vault.merged:
             self.vault.merged = False
             self.refresh_all()
-            self.set_status("↻ Подтянуты изменения с другого устройства", self.t["warn"])
+            self.set_status(tr('↻ Подтянуты изменения с другого устройства'), self.t["warn"])
 
     def _start_services(self):
         self.tray = start_tray(self)
@@ -2602,7 +2634,7 @@ class App:
     # ---------------- автоввод
     def autotype_entry(self, e, hwnd=0, delay=0.35):
         if not IS_WIN:
-            messagebox.showinfo(APP_NAME, "Автоввод работает только в Windows.", parent=self.root)
+            messagebox.showinfo(tr(APP_NAME), tr('Автоввод работает только в Windows.'), parent=self.root)
             return
         login, pw = e["login"], e["password"]
         enter = bool(self.settings.get("autotype_enter"))
@@ -2614,11 +2646,11 @@ class App:
             time.sleep(delay)
             if (not win_foreground() or win_foreground() == own or
                     (hwnd and win_foreground() != hwnd)):  # только указанное окно
-                self.post(lambda: self.set_status("Автоввод отменён: не выбрано целевое окно",
+                self.post(lambda: self.set_status(tr('Автоввод отменён: не выбрано целевое окно'),
                                                   self.t["warn"]))
                 return
             ok = win_autotype(login, pw, enter)
-            self.post(lambda: self.set_status("✓ Данные введены" if ok else "Не удалось ввести данные",
+            self.post(lambda: self.set_status(tr('✓ Данные введены') if ok else tr('Не удалось ввести данные'),
                                               self.t["good"] if ok else self.t["bad"]))
         threading.Thread(target=work, daemon=True).start()
 
@@ -2627,23 +2659,23 @@ class App:
         if not e or e["deleted"]:
             return
         if not IS_WIN:
-            messagebox.showinfo(APP_NAME, "Автоввод работает только в Windows.", parent=self.root)
+            messagebox.showinfo(tr(APP_NAME), tr('Автоввод работает только в Windows.'), parent=self.root)
             return
-        self.set_status("Ввод через 3 секунды: кликните в нужное поле другого окна…", self.t["warn"])
+        self.set_status(tr('Ввод через 3 секунды: кликните в нужное поле другого окна…'), self.t["warn"])
         self.root.after(3000, lambda: self.autotype_entry(e, 0, 0.0))
 
     # ---------------- проверки через интернет
     def check_updates(self, manual=True):
-        repo = (self.settings.get("update_repo") or "").strip()
+        repo = (self.settings.get("update_repo") or "userArturM/Moipar-").strip()
         if not REPO_RE.match(repo):
             if manual:
-                messagebox.showinfo(APP_NAME, "Укажите репозиторий GitHub в Сервис → Настройки "
-                                    "(например, ivan/moi-paroli).", parent=self.root)
+                messagebox.showinfo(tr(APP_NAME), tr('Укажите репозиторий GitHub в Сервис → Настройки (например, ivan/moi-paroli).'), parent=self.root)
             return
 
         def work():
             try:
-                info = check_update(repo)
+                from github_updates import load_token
+                info = check_update(repo, token=load_token(data_dir()))
             except Exception as ex:
                 info = {"error": str(ex)}
             self.post(lambda: self._show_update(info, manual))
@@ -2652,24 +2684,23 @@ class App:
     def _show_update(self, info, manual):
         if "error" in info:
             if manual:
-                messagebox.showwarning(APP_NAME, f"Не удалось проверить обновления:\n{info['error']}",
+                messagebox.showwarning(tr(APP_NAME), f"{tr('Не удалось проверить обновления:\n')}{tr(info['error'])}",
                                        parent=self.root)
+                if info.get("url") and messagebox.askyesno(tr(APP_NAME),tr('Открыть страницу сборок GitHub?'),parent=self.root):
+                    webbrowser.open(info["url"])
             return
         if info["newer"]:
-            if messagebox.askyesno(APP_NAME, f"Доступна версия {info['version']} (у вас {APP_VERSION}).\n"
-                                   "Открыть страницу загрузки?", parent=self.root):
+            if messagebox.askyesno(tr(APP_NAME), f"{tr('Доступна версия ')}{info['version']}{tr(' (у вас ')}{APP_VERSION}{tr(').\nОткрыть страницу загрузки?')}", parent=self.root):
                 if info["url"].startswith("https://github.com/"):
                     webbrowser.open(info["url"])
         elif manual:
-            messagebox.showinfo(APP_NAME, "У вас последняя версия.", parent=self.root)
+            messagebox.showinfo(tr(APP_NAME), tr('У вас последняя версия.'), parent=self.root)
 
     def check_breaches(self):
         if not self.vault.active():
             return
         if not messagebox.askyesno(
-                APP_NAME, "Пароли будут проверены по базе известных утечек Have I Been Pwned.\n"
-                          "Для каждого пароля в интернет уходят только первые 5 символов его хеша SHA-1, "
-                          "сам пароль и ваши логины с компьютера не уходят.\n\nНужен интернет. Продолжить?",
+                tr(APP_NAME), tr('Пароли будут проверены по базе известных утечек Have I Been Pwned.\nДля каждого пароля в интернет уходят только первые 5 символов его хеша SHA-1, сам пароль и ваши логины с компьютера не уходят.\n\nНужен интернет. Продолжить?'),
                 parent=self.root):
             return
         d = BreachDialog(self, self.root)
@@ -2680,66 +2711,60 @@ class App:
         e = self.selected()
         if not e or not e["password"]:
             return
-        self.set_status("Проверка пароля по базе утечек…", self.t["muted"])
+        self.set_status(tr('Проверка пароля по базе утечек…'), self.t["muted"])
 
         def work():
             try:
                 n = pwned_count(e["password"])
             except Exception as ex:
                 self.post(lambda: messagebox.showwarning(
-                    APP_NAME, f"Не удалось проверить (нужен интернет):\n{ex}", parent=self.root))
+                    tr(APP_NAME), f"{tr('Не удалось проверить (нужен интернет):\n')}{ex}", parent=self.root))
                 return
             self.post(lambda: self._pwned_result(e, n))
         threading.Thread(target=work, daemon=True).start()
 
     def _pwned_result(self, e, n):
         if n:
-            self.set_status(f"⚠ Пароль «{e['title']}» найден в утечках ({n} раз)", self.t["bad"])
-            messagebox.showwarning(APP_NAME, f"Пароль записи «{e['title']}» найден в известных утечках "
-                                   f"({n} раз). Его нужно сменить.", parent=self.root)
+            self.set_status(f"{tr('⚠ Пароль «')}{e['title']}{tr('» найден в утечках (')}{n}{tr(' раз)')}", self.t["bad"])
+            messagebox.showwarning(tr(APP_NAME), f"{tr('Пароль записи «')}{e['title']}{tr('» найден в известных утечках (')}{n}{tr(' раз). Его нужно сменить.')}", parent=self.root)
         else:
-            self.set_status(f"✓ Пароль «{e['title']}» в утечках не найден")
+            self.set_status(f"{tr('✓ Пароль «')}{e['title']}{tr('» в утечках не найден')}")
 
     # ---------------- облачная папка, ключевой файл, вложения
     def move_vault(self):
         folder = filedialog.askdirectory(
-            parent=self.root, title="Папка синхронизации (Яндекс.Диск, OneDrive, Dropbox…)")
+            parent=self.root, title=tr('Папка синхронизации (Яндекс.Диск, OneDrive, Dropbox…)'))
         if not folder:
             return
         target = os.path.join(folder, "MoiParoli-vault.dat")
         if os.path.exists(target) and not messagebox.askyesno(
-                APP_NAME, "В этой папке уже есть файл хранилища. Заменить его текущим?", parent=self.root):
+                tr(APP_NAME), tr('В этой папке уже есть файл хранилища. Заменить его текущим?'), parent=self.root):
             return
         try:
             shutil.copyfile(self.vault.path, target)
         except OSError as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось скопировать:\n{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось скопировать:\n')}{ex}", parent=self.root)
             return
         self.vault.path = target
         self.vault._sig = self.vault._disk_sig()
         self.settings.set("vault_path", target)
         messagebox.showinfo(
-            APP_NAME, "Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\n"
-                      "На втором компьютере установите «Мои пароли» и выберите Файл → «Подключить "
-                      "существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\n"
-                      "Прежний локальный файл остался на месте как резервная копия.", parent=self.root)
+            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Мои пароли» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
 
     def attach_vault(self):
-        path = filedialog.askopenfilename(parent=self.root, title="Выберите файл хранилища",
-                                          filetypes=[("Хранилище", "*.dat"), ("Все файлы", "*.*")])
+        path = filedialog.askopenfilename(parent=self.root, title=tr('Выберите файл хранилища'),
+                                          filetypes=[(tr('Хранилище'), "*.dat"), (tr('Все файлы'), "*.*")])
         if not path:
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
                 blob = json.load(f)
             if not (isinstance(blob, dict) and blob.get("magic") in ("passvault", "passvault-v1")):
-                raise ValueError("это не файл хранилища")
+                raise ValueError(tr('это не файл хранилища'))
         except (OSError, ValueError) as ex:
-            messagebox.showerror(APP_NAME, f"Файл не подходит:\n{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Файл не подходит:\n')}{ex}", parent=self.root)
             return
-        if not messagebox.askyesno(APP_NAME, "Программа будет работать с выбранным файлом вместо "
-                                   "хранилища на этом компьютере (прежний файл останется на месте). "
-                                   "Продолжить?", parent=self.root):
+        if not messagebox.askyesno(tr(APP_NAME), tr('Программа будет работать с выбранным файлом вместо хранилища на этом компьютере (прежний файл останется на месте). Продолжить?'), parent=self.root):
             return
         self._hide_pw(refresh=False)
         self.vault.lock()
@@ -2772,7 +2797,7 @@ class App:
             shown = f["value"] if (not f.get("secret") or self.pw_visible) else "•" * 8
             ttk.Label(line, text=shown, style="Mono.TLabel" if f.get("secret") else "Panel.TLabel",
                       wraplength=190, justify="left").pack(side="left", fill="x", expand=True)
-            ttk.Button(line, text="Копировать", width=11,
+            ttk.Button(line, text=tr('Копировать'), width=11,
                        command=lambda v=f["value"], n=f["name"]: self.copy_text(v, n)).pack(side="right")
 
     def _guard(self, fn):
@@ -2786,12 +2811,11 @@ class App:
             self.resolve_conflicts()
             return False, None
         except KeyChanged:
-            messagebox.showwarning(APP_NAME, "Хранилище изменено на другом устройстве с другим "
-                                   "мастер-паролем или ключевым файлом.\nВойдите заново.", parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), tr('Хранилище изменено на другом устройстве с другим мастер-паролем или ключевым файлом.\nВойдите заново.'), parent=self.root)
             self.lock()
             return False, None
         except (OSError, VaultError) as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось сохранить данные:\n{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить данные:\n')}{ex}", parent=self.root)
             return False, None
         self._after_merge()
         return True, res
@@ -2807,15 +2831,15 @@ class App:
                 return
             self.vault.resolve_conflicts(snapshot, dialog.result)
             self.refresh_all()
-            self.set_status("Конфликты разрешены. Выбранные версии сохранены.")
+            self.set_status(tr('Конфликты разрешены. Выбранные версии сохранены.'))
         except (VaultError, OSError, ValueError) as ex:
-            messagebox.showwarning(APP_NAME, str(ex), parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), str(ex), parent=self.root)
 
     def set_status(self, text, color=None):
-        self.status_left.config(text=text, foreground=color or self.t["good"])
+        self.status_left.config(text=tr(text), foreground=color or self.t["good"])
 
     def saved_note(self):
-        self.set_status("✓ Автосохранено " + time.strftime("%H:%M:%S"))
+        self.set_status(tr('✓ Автосохранено ') + time.strftime("%H:%M:%S"))
 
     def copy_text(self, text, what):
         if not text:
@@ -2829,7 +2853,7 @@ class App:
             self.root.after_cancel(self._clip_job)
         self._clip_job = self.root.after(secs * 1000, lambda: self._clear_clip(text))
         try:
-            self.set_status(f"{what} скопирован — буфер очистится через {secs} с")
+            self.set_status(f"{what}{tr(' скопирован — буфер очистится через ')}{secs}{tr(' с')}")
         except (AttributeError, tk.TclError):
             pass
 
@@ -2864,38 +2888,41 @@ class App:
         t = self.t
         f = ttk.Frame(self.root)
         self._swap(f)
-        ttk.Label(f, text="◈  Мои пароли", style="Hero.TLabel").place(x=40, y=32)
-        ttk.Label(f, text="Личное пространство для ваших доступов", style="HeroMuted.TLabel").place(x=42, y=80)
+        ttk.Label(f, text=tr('◈  Мои пароли'), style="Hero.TLabel").place(x=40, y=32)
+        ttk.Label(f, text=tr('Личное пространство для ваших доступов'), style="HeroMuted.TLabel").place(x=42, y=80)
         card = ttk.Frame(f, style="Panel.TFrame", padding=(48, 36))
         card.place(relx=0.5, rely=0.46, anchor="center")
         if self.icon:
             ttk.Label(card, image=self.icon, style="Panel.TLabel").pack()
-        ttk.Label(card, text="Начнём с защиты" if new else "С возвращением", style="Title.TLabel").pack(pady=(10, 0))
-        ttk.Label(card, text=("Создайте мастер-пароль для нового хранилища" if new
-                              else "Введите мастер-пароль, чтобы открыть хранилище"),
+        ttk.Label(card, text=tr('Начнём с защиты') if new else tr('С возвращением'), style="Title.TLabel").pack(pady=(10, 0))
+        ttk.Label(card, text=(tr('Создайте мастер-пароль для нового хранилища') if new
+                              else tr('Введите мастер-пароль, чтобы открыть хранилище')),
                   style="Muted.TLabel").pack(pady=(4, 20))
-        ttk.Label(card, text="Мастер-пароль", style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(card, text=tr('Мастер-пароль'), style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
         pw1 = ttk.Entry(card, show="•", width=34, font=(FF, 11))
         pw1.pack(pady=4, fill="x")
         pw1.focus_set()
+        language=tk.StringVar(value="English" if self.settings.get("language")=="en" else "Русский")
+        picker=ttk.Combobox(f,textvariable=language,values=("Русский","English"),state="readonly",width=12)
+        picker.place(relx=1,x=-40,y=38,anchor="ne")
+        picker.bind("<<ComboboxSelected>>",lambda event:self.set_language("en" if language.get()=="English" else "ru"))
         pw2 = None
         if new:
             bar = ttk.Progressbar(card, maximum=100, length=260)
             bar.pack(pady=(6, 0), fill="x")
             lbl = ttk.Label(card, text="", style="Muted.TLabel")
             lbl.pack(anchor="w")
-            ttk.Label(card, text="Повторите пароль", style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
+            ttk.Label(card, text=tr('Повторите пароль'), style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
             pw2 = ttk.Entry(card, show="•", width=34, font=(FF, 11))
             pw2.pack(pady=4, fill="x")
-            ttk.Label(card, text=f"Минимум {MIN_MASTER_LEN} символов. Лучше — фраза из нескольких слов. "
-                      "Если вы забудете мастер-пароль, данные восстановить невозможно.",
+            ttk.Label(card, text=f"{tr('Минимум ')}{MIN_MASTER_LEN}{tr(' символов. Лучше — фраза из нескольких слов. Если вы забудете мастер-пароль, данные восстановить невозможно.')}",
                       style="Muted.TLabel", wraplength=300, foreground=t["warn"]).pack(pady=(8, 0))
 
             def meter(*_):
                 bits, text, level = strength(pw1.get())
                 bar["value"] = min(100, bits)
                 bar.configure(style=f"{LEVEL_STYLE[level]}.Horizontal.TProgressbar")
-                lbl.config(text=text)
+                lbl.config(text=tr(text))
             pw1.bind("<KeyRelease>", meter)
         needs_kf = (not new) and Vault.header_needs_keyfile(self.vault.path)
         kf = {"path": self.settings.get("keyfile_path") or ""}
@@ -2903,19 +2930,18 @@ class App:
             kf_row = ttk.Frame(card, style="Panel.TFrame")
             kf_row.pack(fill="x", pady=(8, 0))
             kf_lbl = ttk.Label(kf_row, style="Muted.TLabel", wraplength=170,
-                               text=os.path.basename(kf["path"]) if kf["path"] else "ключевой файл не выбран")
+                               text=os.path.basename(kf["path"]) if kf["path"] else tr('ключевой файл не выбран'))
             kf_lbl.pack(side="left")
 
             def pick_kf():
-                p = filedialog.askopenfilename(parent=self.root, title="Ключевой файл")
+                p = filedialog.askopenfilename(parent=self.root, title=tr('Ключевой файл'))
                 if p:
                     kf["path"] = p
                     kf_lbl.config(text=os.path.basename(p))
-            ttk.Button(kf_row, text="Ключевой файл…", command=pick_kf).pack(side="right")
+            ttk.Button(kf_row, text=tr('Ключевой файл…'), command=pick_kf).pack(side="right")
         if new and self.settings.get("vault_path"):
             ttk.Label(card, style="Muted.TLabel", wraplength=300, foreground=t["warn"],
-                      text="Файл хранилища не найден:\n" + self.vault.path + "\nЕсли это облачная папка, "
-                           "дождитесь синхронизации. Иначе будет создано новое пустое хранилище."
+                      text=tr('Файл хранилища не найден:\n') + self.vault.path + tr('\nЕсли это облачная папка, дождитесь синхронизации. Иначе будет создано новое пустое хранилище.')
                       ).pack(pady=(8, 0))
         err = ttk.Label(card, text="", style="Panel.TLabel", foreground=t["bad"], wraplength=300)
         err.pack(pady=8)
@@ -2923,17 +2949,17 @@ class App:
         def submit(_=None):
             wait = self._next_try - time.time()
             if wait > 0:
-                err.config(text=f"Слишком много попыток. Подождите {int(wait) + 1} с.")
+                err.config(text=f"{tr('Слишком много попыток. Подождите ')}{int(wait) + 1}{tr(' с.')}")
                 return
             pw = pw1.get()
             if new:
                 if len(pw) < MIN_MASTER_LEN:
-                    err.config(text=f"Пароль короче {MIN_MASTER_LEN} символов")
+                    err.config(text=f"{tr('Пароль короче ')}{MIN_MASTER_LEN}{tr(' символов')}")
                     return
                 if pw != pw2.get():
-                    err.config(text="Пароли не совпадают")
+                    err.config(text=tr('Пароли не совпадают'))
                     return
-            err.config(text="Проверка…", foreground=t["muted"])
+            err.config(text=tr('Проверка…'), foreground=t["muted"])
             self.root.update_idletasks()
             try:
                 if new:
@@ -2942,13 +2968,13 @@ class App:
                     content = None
                     if needs_kf:
                         if not kf["path"]:
-                            err.config(text="Выберите ключевой файл", foreground=t["bad"])
+                            err.config(text=tr('Выберите ключевой файл'), foreground=t["bad"])
                             return
                         try:
                             with open(kf["path"], "rb") as fh:
                                 content = fh.read()
                         except OSError as ex:
-                            err.config(text=f"Не удаётся прочитать ключевой файл: {ex}",
+                            err.config(text=f"{tr('Не удаётся прочитать ключевой файл: ')}{ex}",
                                        foreground=t["bad"])
                             return
                     self.vault.unlock(pw, content)
@@ -2958,30 +2984,30 @@ class App:
                 self._fails += 1
                 if self._fails >= 3:
                     self._next_try = time.time() + min(2 ** (self._fails - 2), 30)
-                err.config(text="Неверный мастер-пароль" + (" или ключевой файл" if needs_kf else ""),
+                err.config(text=tr('Неверный мастер-пароль') + (tr(' или ключевой файл') if needs_kf else ""),
                            foreground=t["bad"])
                 pw1.delete(0, "end")
                 return
             except KeyfileRequired:
-                err.config(text="Для этого хранилища нужен ключевой файл", foreground=t["bad"])
+                err.config(text=tr('Для этого хранилища нужен ключевой файл'), foreground=t["bad"])
                 return
             except VaultError as ex:
-                err.config(text=f"Файл хранилища повреждён: {ex}. Можно восстановить из резервной "
-                                "копии (папка backups).", foreground=t["bad"])
+                err.config(text=f"{tr('Файл хранилища повреждён: ')}{ex}{tr('. Можно восстановить из резервной копии (папка backups).')}", foreground=t["bad"])
                 return
             except OSError as ex:
-                err.config(text=f"Ошибка доступа к файлу: {ex}", foreground=t["bad"])
+                err.config(text=f"{tr('Ошибка доступа к файлу: ')}{ex}", foreground=t["bad"])
                 return
             self._fails = 0
             self.show_main()
+            self.animate_entry()
 
-        ttk.Button(card, text=("Создать хранилище" if new else "Открыть"),
+        ttk.Button(card, text=(tr('Создать хранилище') if new else tr('Открыть')),
                    style="Accent.TButton", command=submit).pack(fill="x", ipady=3)
         if not new and not needs_kf and self.hello.enabled():
-            ttk.Button(card, text="◉  Войти через Windows Hello",
+            ttk.Button(card, text=tr('◉  Войти через Windows Hello'),
                        command=lambda: self.hello_login(err)).pack(fill="x", pady=(10, 0))
         self.root.bind("<Return>", submit)
-        ttk.Label(f, text="AES-256-GCM  ·  данные хранятся только на этом компьютере",
+        ttk.Label(f, text=tr('AES-256-GCM  ·  данные хранятся только на этом компьютере'),
                   style="BgMuted.TLabel").place(relx=0.5, rely=0.96, anchor="s")
 
     def hello_login(self, err_label):
@@ -2991,22 +3017,22 @@ class App:
         if sys.platform == "win32":
             import ctypes
             hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
-        err_label.config(text="Ожидание подтверждения Windows Hello…", foreground=self.t["muted"])
+        err_label.config(text=tr('Ожидание подтверждения Windows Hello…'), foreground=self.t["muted"])
         def work():
             try:
                 if not self.hello.verify(hwnd):
-                    self._q.put(lambda: err_label.config(text="Подтверждение Windows Hello отменено"))
+                    self._q.put(lambda: err_label.config(text=tr('Подтверждение Windows Hello отменено')))
                     return
                 password = self.hello.retrieve_after_verification()
                 def finish():
                     try:
                         if not self.vault.exists():
-                            raise VaultError("Хранилище отсутствует")
+                            raise VaultError(tr('Хранилище отсутствует'))
                         self.vault.unlock(password)
                         self._fails = 0
                         self.show_main()
                     except (VaultError, OSError, ValueError) as ex:
-                        err_label.config(text=f"Не удалось открыть хранилище: {ex}",
+                        err_label.config(text=f"{tr('Не удалось открыть хранилище: ')}{ex}",
                                          foreground=self.t["bad"])
                 self._q.put(finish)
             except (HelloUnavailable, OSError, ValueError, KeyError) as ex:
@@ -3017,22 +3043,22 @@ class App:
         if not self.vault.unlocked:
             return
         if self.hello.enabled():
-            if messagebox.askyesno("Windows Hello", "Отключить быстрый вход Windows Hello?", parent=self.root):
+            if messagebox.askyesno("Windows Hello", tr('Отключить быстрый вход Windows Hello?'), parent=self.root):
                 self.hello.disable()
-                messagebox.showinfo("Windows Hello", "Быстрый вход отключён.", parent=self.root)
+                messagebox.showinfo("Windows Hello", tr('Быстрый вход отключён.'), parent=self.root)
             return
         if Vault.header_needs_keyfile(self.vault.path):
-            messagebox.showwarning("Windows Hello", "Быстрый вход недоступен для хранилища с ключевым файлом.")
+            messagebox.showwarning("Windows Hello", tr('Быстрый вход недоступен для хранилища с ключевым файлом.'))
             return
         if sys.platform != "win32":
-            messagebox.showwarning("Windows Hello", "Эта функция доступна только в Windows 10/11.")
+            messagebox.showwarning("Windows Hello", tr('Эта функция доступна только в Windows 10/11.'))
             return
-        password = simpledialog.askstring("Windows Hello", "Введите мастер-пароль для включения быстрого входа:",
+        password = simpledialog.askstring("Windows Hello", tr('Введите мастер-пароль для включения быстрого входа:'),
                                           parent=self.root, show="•")
         if password is None:
             return
         if not self.vault.verify_password(password):
-            messagebox.showerror("Windows Hello", "Неверный мастер-пароль.", parent=self.root)
+            messagebox.showerror("Windows Hello", tr('Неверный мастер-пароль.'), parent=self.root)
             return
         hwnd = self.root.winfo_id()
         if sys.platform == "win32":
@@ -3042,11 +3068,10 @@ class App:
             import asyncio
             try:
                 if not self.hello.verify(hwnd):
-                    self._q.put(lambda: messagebox.showwarning("Windows Hello", "Проверка не пройдена."))
+                    self._q.put(lambda: messagebox.showwarning("Windows Hello", tr('Проверка не пройдена.')))
                     return
                 self.hello.enroll(password)
-                self._q.put(lambda: messagebox.showinfo("Windows Hello", "Быстрый вход включён. "
-                    "Секрет защищён DPAPI текущего пользователя Windows; это не аппаратная привязка к Hello."))
+                self._q.put(lambda: messagebox.showinfo("Windows Hello", tr('Быстрый вход включён. Секрет защищён DPAPI текущего пользователя Windows; это не аппаратная привязка к Hello.')))
             except (HelloUnavailable, OSError, ValueError) as ex:
                 self._q.put(lambda msg=str(ex): messagebox.showerror("Windows Hello", msg))
         threading.Thread(target=work, daemon=True).start()
@@ -3061,21 +3086,21 @@ class App:
 
         head = ttk.Frame(f, style="Panel.TFrame", padding=(24, 14))
         head.pack(fill="x")
-        ttk.Label(head, text="◈  Мои пароли", style="Title.TLabel").pack(side="left", padx=(0, 24))
+        ttk.Label(head, text=tr('◈  Мои пароли'), style="Title.TLabel").pack(side="left", padx=(0, 24))
         menus = ttk.Frame(f, style="Panel.TFrame", padding=(24, 0, 24, 8))
         menus.pack(fill="x")
-        for text, menu in (("Файл", self._file_menu()), ("Инструменты", self._tools_menu()),
-                           ("Справка", self._help_menu())):
-            ttk.Menubutton(menus, text=text, menu=menu).pack(side="left", padx=3)
-        ttk.Button(head, text="Заблокировать", command=self.lock).pack(side="right")
-        ttk.Button(head, text="Светлая / тёмная", command=self.toggle_theme).pack(side="right", padx=8)
+        for text, menu in ((tr('Файл'), self._file_menu()), (tr('Инструменты'), self._tools_menu()),
+                           (tr('Справка'), self._help_menu())):
+            ttk.Menubutton(menus, text=tr(text), menu=menu).pack(side="left", padx=3)
+        ttk.Button(head, text=tr('Заблокировать'), command=self.lock).pack(side="right")
+        ttk.Button(head, text=tr('Светлая / тёмная'), command=self.toggle_theme).pack(side="right", padx=8)
 
         hero = ttk.Frame(f, padding=(24, 18))
         hero.pack(fill="x")
-        ttk.Button(hero, text="＋  Добавить пароль", style="Accent.TButton",
+        ttk.Button(hero, text=tr('＋  Добавить пароль'), style="Accent.TButton",
                    command=self.add).pack(side="right", pady=8)
-        ttk.Label(hero, text="Ваши пароли", style="Hero.TLabel").pack(anchor="w")
-        ttk.Label(hero, text="Всё, что нужно для входа. В одном спокойном пространстве.",
+        ttk.Label(hero, text=tr('Ваши пароли'), style="Hero.TLabel").pack(anchor="w")
+        ttk.Label(hero, text=tr('Всё, что нужно для входа. В одном спокойном пространстве.'),
                   style="HeroMuted.TLabel").pack(anchor="w", pady=(5, 0))
         overview = ttk.Frame(f, padding=(24, 0))
         overview.pack(fill="x")
@@ -3095,41 +3120,42 @@ class App:
         body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
 
         side_fr = ttk.Frame(body, style="Side.TFrame", width=240)
-        ttk.Label(side_fr, text="БИБЛИОТЕКА", style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
+        ttk.Label(side_fr, text=tr('БИБЛИОТЕКА'), style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
         navigation = ttk.Frame(side_fr, style="Side.TFrame")
         self.side = ttk.Treeview(navigation, show="tree", selectmode="browse", style="Side.Treeview")
         self.side.column("#0", width=225)
         self.side.tag_configure("head", foreground=t["muted"], font=(FF, 8, "bold"))
         tools = ttk.Frame(side_fr, style="Side.TFrame", padding=12)
         tools.pack(side="bottom", fill="x")
-        ttk.Button(tools,text="Браузеры",style="Ghost.TButton",command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=3)
+        ttk.Button(tools,text=tr('Браузеры'),style="Ghost.TButton",command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=3)
         ttk.Separator(tools).pack(fill="x", pady=(0, 12))
-        for text, command in (("Аудит безопасности", self.audit),
-                              ("Генератор паролей", lambda: GeneratorDialog(self, self.root)),
-                              ("Настройки", lambda: SettingsDialog(self, self.root))):
-            ttk.Button(tools, text=text, style="Ghost.TButton", command=command).pack(fill="x", pady=3)
+        for text, command in ((tr('Аудит безопасности'), self.audit),
+                              (tr('Генератор паролей'), lambda: GeneratorDialog(self, self.root)),
+                              (tr('Настройки'), lambda: SettingsDialog(self, self.root))):
+            ttk.Button(tools, text=tr(text), style="Ghost.TButton", command=command).pack(fill="x", pady=3)
         navigation.pack(fill="both", expand=True)
         self.side.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=6)
         nav_scroll = ttk.Scrollbar(navigation, orient="vertical", command=self.side.yview)
         nav_scroll.pack(side="right", fill="y")
         self.side.configure(yscrollcommand=nav_scroll.set)
         self.side.bind("<<TreeviewSelect>>", self.on_side_select)
+        self.side.bind("<Button-3>", self.category_menu)
         if compact:
-            body.add(side_fr, text="Разделы")
+            body.add(side_fr, text=tr('Разделы'))
         else:
             body.add(side_fr, weight=0)
 
         center = ttk.Frame(body)
         toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
         toolbar.pack(fill="x")
-        ttk.Label(toolbar, text="Поиск по названию, логину или тегу",
+        ttk.Label(toolbar, text=tr('Поиск по названию, логину или тегу'),
                   style="Muted.TLabel").pack(side="bottom", anchor="w", pady=(8, 0))
-        ttk.Label(toolbar, text="Записи", style="Section.TLabel").pack(side="left", padx=(0, 18))
+        ttk.Label(toolbar, text=tr('Записи'), style="Section.TLabel").pack(side="left", padx=(0, 18))
         self.search = tk.StringVar()
         self.search.trace_add("write", lambda *a: self.refresh_list())
         self.search_entry = ttk.Entry(toolbar, textvariable=self.search, style="Search.TEntry")
         self.search_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(toolbar, text="Найти", style="Compact.TButton",
+        ttk.Button(toolbar, text=tr('Найти'), style="Compact.TButton",
                    command=lambda: self.search_entry.focus_set()).pack(side="left", padx=(8, 0))
         lst = ttk.Frame(center, style="Panel.TFrame")
         lst.pack(fill="both", expand=True)
@@ -3140,7 +3166,7 @@ class App:
         from tkinter import font as tkfont
         column_font = tkfont.Font(family=FF, size=10)
         for key, name, width in self.COLUMNS:
-            self.tree.heading(key, text=name, command=lambda k=key: self.sort_by(k))
+            self.tree.heading(key, text=tr(name), command=lambda k=key: self.sort_by(k))
             minimum = max(width, column_font.measure(name) + 32)
             self.tree.column(key, width=minimum, minwidth=minimum, anchor="center" if key == "fav" else "w",
                              stretch=(key != "fav"))
@@ -3160,7 +3186,7 @@ class App:
         self.tree.bind("<Control-Shift-C>", lambda e: self.copy_password())
         self.tree.bind("<Button-3>", self.context_menu)
         if compact:
-            body.add(center, text="Записи")
+            body.add(center, text=tr('Записи'))
             body.select(center)
         else:
             body.add(center, weight=3)
@@ -3179,7 +3205,7 @@ class App:
             scrollregion=detail_canvas.bbox("all")))
         self._build_details(detail_content)
         if compact:
-            body.add(det, text="Подробности")
+            body.add(det, text=tr('Подробности'))
         else:
             body.add(det, weight=1)
 
@@ -3192,68 +3218,111 @@ class App:
         r.bind("<Control-b>", self._guard(self.copy_login))
         r.bind("<Control-Shift-C>", self._guard(self.copy_password))
         self.refresh_all()
-        self.set_status("Хранилище открыто. Изменения сохраняются автоматически.")
+        self.set_status(tr('Хранилище открыто. Изменения сохраняются автоматически.'))
         if self._totp_job:
             r.after_cancel(self._totp_job)
         self._totp_tick()
 
+    def animate_entry(self):
+        if not self.settings.get("animations"): return
+        if self._animation_id:
+            self.root.after_cancel(self._animation_id)
+        start=time.monotonic()
+        def frame():
+            progress=min(1,(time.monotonic()-start)/0.24)
+            try: self.root.attributes("-alpha",0.72+0.28*(1-(1-progress)**3))
+            except tk.TclError: return
+            self._animation_id=self.root.after(16,frame) if progress<1 else None
+        frame()
+
+    def set_language(self, language):
+        import localization
+        self.settings.set("language",language)
+        localization.set_language(language)
+        self.root.title(localization.tr(APP_NAME))
+        if self.vault.unlocked:self.show_main()
+        else:self.show_login()
+
+    def category_menu(self,event):
+        item=self.side.identify_row(event.y)
+        if not item.startswith("cat:"):return
+        self.side.selection_set(item)
+        menu=self._menu()
+        menu.add_command(label=tr('Удалить категорию…'),command=lambda:self.delete_category(item[4:]))
+        menu.tk_popup(event.x_root,event.y_root)
+
+    def delete_category(self, name=None):
+        if name is None:
+            if self.cat_filter.startswith("cat:"):name=self.cat_filter[4:]
+            else:
+                top=_new_top(self,self.root,tr('Удалить категорию'))
+                frame=ttk.Frame(top,padding=24);frame.pack()
+                choice=tk.StringVar(value=self.vault.categories()[0] if self.vault.categories() else "")
+                ttk.Combobox(frame,textvariable=choice,values=self.vault.categories(),state="readonly").pack()
+                ttk.Button(frame,text=tr('Удалить'),command=lambda:(top.destroy(),self.delete_category(choice.get()))).pack(pady=12)
+                return
+        if not name:return
+        if not messagebox.askyesno(tr(APP_NAME),tr('Удалить категорию «')+name+tr('»? Записи останутся без категории.'),parent=self.root):return
+        ok,_=self._do(self.vault.delete_category,name)
+        if ok:
+            self.cat_filter="all"
+            self.refresh_all()
+
     def _file_menu(self):
         m = self._menu()
-        m.add_command(label="Заблокировать", accelerator="Ctrl+L", command=self.lock)
+        m.add_command(label=tr('Заблокировать'), accelerator="Ctrl+L", command=self.lock)
         m.add_separator()
-        m.add_command(label="Импорт из CSV / Excel…", command=self.import_csv)
-        m.add_command(label="Экспорт зашифрованной копии…", command=self.export_encrypted)
-        m.add_command(label="Экспорт в CSV (открытый текст)…", command=self.export_csv)
-        m.add_command(label="Восстановить из резервной копии…", command=self.restore_backup)
+        m.add_command(label=tr('Импорт из CSV / Excel…'), command=self.import_csv)
+        m.add_command(label=tr('Экспорт зашифрованной копии…'), command=self.export_encrypted)
+        m.add_command(label=tr('Экспорт в CSV (открытый текст)…'), command=self.export_csv)
+        m.add_command(label=tr('Восстановить из резервной копии…'), command=self.restore_backup)
         m.add_separator()
-        m.add_command(label="Хранилище в облачной папке…", command=self.move_vault)
-        m.add_command(label="Подключить существующее хранилище…", command=self.attach_vault)
+        m.add_command(label=tr('Хранилище в облачной папке…'), command=self.move_vault)
+        m.add_command(label=tr('Подключить существующее хранилище…'), command=self.attach_vault)
         m.add_separator()
-        m.add_command(label="Сменить мастер-пароль…", command=self.change_master)
-        m.add_command(label="Ключевой файл…", command=self.manage_keyfile)
+        m.add_command(label=tr('Сменить мастер-пароль…'), command=self.change_master)
+        m.add_command(label=tr('Ключевой файл…'), command=self.manage_keyfile)
         m.add_separator()
-        m.add_command(label="Выход", command=self.quit_app)
+        m.add_command(label=tr('Выход'), command=self.quit_app)
         return m
 
     def _tools_menu(self):
         m = self._menu()
-        m.add_command(label="Браузеры: подключение и диагностика",command=lambda:BrowserDialog(self,self.root))
-        m.add_command(label="Разрешить конфликты…", command=self.resolve_conflicts)
-        m.add_command(label="Быстрый поиск", command=self.quick_search)
-        m.add_command(label="Аудит безопасности…", command=self.audit)
-        m.add_command(label="Проверка на утечки (интернет)…", command=self.check_breaches)
-        m.add_command(label="Генератор паролей…",
+        m.add_command(label=tr('Браузеры: подключение и диагностика'),command=lambda:BrowserDialog(self,self.root))
+        m.add_command(label=tr('Разрешить конфликты…'), command=self.resolve_conflicts)
+        m.add_command(label=tr('Быстрый поиск'), command=self.quick_search)
+        m.add_command(label=tr('Аудит безопасности…'), command=self.audit)
+        m.add_command(label=tr('Проверка на утечки (интернет)…'), command=self.check_breaches)
+        m.add_command(label=tr('Генератор паролей…'),
                       command=lambda: GeneratorDialog(self, self.root))
-        m.add_command(label="Очистить корзину", command=self.empty_trash)
+        m.add_command(label=tr('Удалить категорию…'), command=self.delete_category)
+        m.add_command(label=tr('Очистить корзину'), command=self.empty_trash)
         m.add_separator()
-        m.add_command(label="Светлая / тёмная тема", command=self.toggle_theme)
-        m.add_command(label="Настройки…", command=lambda: SettingsDialog(self, self.root))
+        m.add_command(label=tr('Светлая / тёмная тема'), command=self.toggle_theme)
+        m.add_command(label=tr('Настройки…'), command=lambda: SettingsDialog(self, self.root))
         return m
 
     def _help_menu(self):
         m = self._menu()
-        m.add_command(label="Открыть папку с данными", command=self.open_data_dir)
-        m.add_command(label="Горячие клавиши", command=lambda: messagebox.showinfo(
-            APP_NAME, "Ctrl+N — новая запись\nCtrl+F — поиск\nCtrl+L — заблокировать\n"
-                      "Ctrl+B — копировать логин\nCtrl+Shift+C — копировать пароль\n"
-                      "Enter / двойной клик — изменить\nDelete — удалить\nEscape — заблокировать", parent=self.root))
-        m.add_command(label="Проверить обновления…", command=self.check_updates)
-        m.add_command(label="О программе", command=self.about)
+        m.add_command(label=tr('Открыть папку с данными'), command=self.open_data_dir)
+        m.add_command(label=tr('Горячие клавиши'), command=lambda: messagebox.showinfo(
+            tr(APP_NAME), tr('Ctrl+N — новая запись\nCtrl+F — поиск\nCtrl+L — заблокировать\nCtrl+B — копировать логин\nCtrl+Shift+C — копировать пароль\nEnter / двойной клик — изменить\nDelete — удалить\nEscape — заблокировать'), parent=self.root))
+        m.add_command(label=tr('Проверить обновления…'), command=self.check_updates)
+        m.add_command(label=tr('О программе'), command=self.about)
         return m
 
     def about(self):
         t = self.t
-        top = _new_top(self, self.root, "О программе")
+        top = _new_top(self, self.root, tr('О программе'))
         frm = ttk.Frame(top, padding=30)
         frm.pack()
         if self.icon:
             ttk.Label(frm, image=self.icon).pack()
-        ttk.Label(frm, text=APP_NAME, font=(FF, 17, "bold")).pack(pady=(8, 0))
-        ttk.Label(frm, text=f"Версия {APP_VERSION}", foreground=t["muted"]).pack()
-        ttk.Label(frm, text="Шифрование AES-256-GCM, ключ из мастер-пароля (scrypt).\n"
-                            "Данные хранятся только на вашем компьютере.\n\n" + self.vault.path,
+        ttk.Label(frm, text=tr(APP_NAME), font=(FF, 17, "bold")).pack(pady=(8, 0))
+        ttk.Label(frm, text=f"{tr('Версия ')}{APP_VERSION}", foreground=t["muted"]).pack()
+        ttk.Label(frm, text=tr('Шифрование AES-256-GCM, ключ из мастер-пароля (scrypt).\nДанные хранятся только на вашем компьютере.\n\n') + self.vault.path,
                   justify="center", wraplength=380, foreground=t["muted"]).pack(pady=14)
-        ttk.Button(frm, text="Закрыть", command=top.destroy).pack()
+        ttk.Button(frm, text=tr('Закрыть'), command=top.destroy).pack()
         top.grab_set()
         self.root.wait_window(top)
 
@@ -3262,8 +3331,8 @@ class App:
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=(0, 10))
         self.stat = {}
-        spec = (("total", "Записей"), ("weak", "Слабых паролей"), ("reused", "Повторов"),
-                ("old", "Устаревшие"), ("score", "Оценка безопасности"))
+        spec = (("total", tr('Записей')), ("weak", tr('Слабых паролей')), ("reused", tr('Повторов')),
+                ("old", tr('Устаревшие')), ("score", tr('Оценка безопасности')))
         for i, (key, caption) in enumerate(spec):
             row.columnconfigure(i, weight=1, uniform="stat")
             card = RoundedCard(row,self.t)
@@ -3293,18 +3362,18 @@ class App:
         p.columnconfigure(0, weight=1)
         self.d_title = ttk.Label(p, text="", style="Title.TLabel", wraplength=320, justify="left")
         self.d_title.grid(row=0, column=0, sticky="we", pady=(0, 8))
-        self.d_empty = ttk.Label(p, text="Выберите запись в списке\nили нажмите «＋ Добавить»",
+        self.d_empty = ttk.Label(p, text=tr('Выберите запись в списке\nили нажмите «＋ Добавить»'),
                                  style="Muted.TLabel", justify="center")
         self.dvars, self.dfields = {}, {}
-        spec = (("url", "САЙТ", (("Открыть", self.open_url),)),
-                ("login", "ЛОГИН", (("Копировать", self.copy_login),)),
-                ("password", "ПАРОЛЬ", (("Показать", self.toggle_pw), ("Копировать", self.copy_password))),
-                ("totp", "КОД 2FA", (("Копировать", self.copy_totp),)),
-                ("category", "КАТЕГОРИЯ", ()), ("tags", "ТЕГИ", ()),
-                ("source", "ИСТОЧНИК", ()), ("updated", "ИЗМЕНЕНО", ()))
+        spec = (("url", tr('САЙТ'), ((tr('Открыть'), self.open_url),)),
+                ("login", tr('ЛОГИН'), ((tr('Копировать'), self.copy_login),)),
+                ("password", tr('ПАРОЛЬ'), ((tr('Показать'), self.toggle_pw), (tr('Копировать'), self.copy_password))),
+                ("totp", tr('КОД 2FA'), ((tr('Копировать'), self.copy_totp),)),
+                ("category", tr('КАТЕГОРИЯ'), ()), ("tags", tr('ТЕГИ'), ()),
+                ("source", tr('ИСТОЧНИК'), ()), ("updated", tr('ИЗМЕНЕНО'), ()))
         for i, (key, text, btns) in enumerate(spec, start=1):
             fr = ttk.Frame(p, style="Panel.TFrame")
-            ttk.Label(fr, text=text, style="Muted.TLabel", font=(FF, 9)).pack(anchor="w")
+            ttk.Label(fr, text=tr(text), style="Muted.TLabel", font=(FF, 9)).pack(anchor="w")
             line = ttk.Frame(fr, style="Panel.TFrame")
             line.pack(fill="x", pady=(2, 0))
             var = tk.StringVar()
@@ -3314,7 +3383,7 @@ class App:
             for btn_text, cmd in reversed(btns):
                 b = ttk.Button(line, text=btn_text, command=cmd, width=10, style="Compact.TButton")
                 b.pack(side="right", padx=(4, 0))
-                if key == "password" and btn_text == "Показать":
+                if key == "password" and btn_text == tr('Показать'):
                     self.pw_btn = b
             if key == "password":
                 self.pw_bar = ttk.Progressbar(fr, maximum=100)
@@ -3325,14 +3394,14 @@ class App:
             self.dvars[key], self.dfields[key] = var, fr
 
         cf = ttk.Frame(p, style="Panel.TFrame")
-        ttk.Label(cf, text="ДОПОЛНИТЕЛЬНО", style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
+        ttk.Label(cf, text=tr('ДОПОЛНИТЕЛЬНО'), style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
         self.d_custom = ttk.Frame(cf, style="Panel.TFrame")
         self.d_custom.pack(fill="x")
         cf.grid(row=9, column=0, sticky="we", pady=6)
         self.dfields["custom"] = cf
 
         nf = ttk.Frame(p, style="Panel.TFrame")
-        ttk.Label(nf, text="ЗАМЕТКА", style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
+        ttk.Label(nf, text=tr('ЗАМЕТКА'), style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
         self.d_note = tk.Text(nf, height=4, width=30, wrap="word", relief="flat", state="disabled",
                               bg=self.t["card"], fg=self.t["fg"], highlightthickness=0,
                               padx=8, pady=6)
@@ -3343,23 +3412,23 @@ class App:
         self.act_normal = ttk.Frame(p, style="Panel.TFrame")
         r1 = ttk.Frame(self.act_normal, style="Panel.TFrame")
         r1.pack(fill="x")
-        ttk.Button(r1, text="Изменить", style="Accent.TButton", command=self.edit).pack(side="left")
+        ttk.Button(r1, text=tr('Изменить'), style="Accent.TButton", command=self.edit).pack(side="left")
         self.fav_btn = ttk.Button(r1, text="★", width=3, command=self.toggle_fav)
         self.fav_btn.pack(side="left", padx=4)
-        ttk.Button(r1, text="⌨ Ввести", command=self.autotype_selected).pack(side="left")
+        ttk.Button(r1, text=tr('⌨ Ввести'), command=self.autotype_selected).pack(side="left")
         r2 = ttk.Frame(self.act_normal, style="Panel.TFrame")
         r2.pack(fill="x", pady=(6, 0))
-        self.hist_btn = ttk.Button(r2, text="История", command=self.show_history)
+        self.hist_btn = ttk.Button(r2, text=tr('История'), command=self.show_history)
         self.hist_btn.pack(side="left")
-        self.att_btn = ttk.Button(r2, text="Вложения", command=self.attachments)
+        self.att_btn = ttk.Button(r2, text=tr('Вложения'), command=self.attachments)
         self.att_btn.pack(side="left", padx=4)
-        ttk.Button(r2, text="Утечки?", command=self.check_pwned_selected).pack(side="left")
-        ttk.Button(self.act_normal, text="Удалить запись", style="Compact.TButton",
+        ttk.Button(r2, text=tr('Утечки?'), command=self.check_pwned_selected).pack(side="left")
+        ttk.Button(self.act_normal, text=tr('Удалить запись'), style="Compact.TButton",
                    command=self.delete).pack(anchor="w", pady=(10, 0))
         self.act_trash = ttk.Frame(p, style="Panel.TFrame")
-        ttk.Button(self.act_trash, text="Восстановить", style="Accent.TButton",
+        ttk.Button(self.act_trash, text=tr('Восстановить'), style="Accent.TButton",
                    command=self.restore).pack(side="left")
-        ttk.Button(self.act_trash, text="Удалить навсегда", command=self.purge).pack(side="right")
+        ttk.Button(self.act_trash, text=tr('Удалить навсегда'), command=self.purge).pack(side="right")
         self.act_normal.grid(row=11, column=0, sticky="we", pady=(14, 0))
         self.act_trash.grid(row=11, column=0, sticky="we", pady=(14, 0))
         self.show_details()
@@ -3386,7 +3455,7 @@ class App:
         self.d_title.config(text=("★ " if e["favorite"] else "") + e["title"])
         values = {"url": e["url"], "login": e["login"], "category": e["category"],
                   "tags": e["tags"], "source": e["source"],
-                  "updated": f'{e["updated"]}  (создано {e["created"]})'}
+                  "updated": f"{e['updated']}{tr('  (создано ')}{e['created']})"}
         for key, val in values.items():
             self.dvars[key].set(val)
             if val:
@@ -3410,15 +3479,15 @@ class App:
             self.fav_btn.config(text="☆" if e["favorite"] else "★")
             self.hist_btn.config(state="normal" if e["history"] else "disabled")
             n_att = len(e["attachments"])
-            self.att_btn.config(text=f"Вложения ({n_att})" if n_att else "Вложения")
+            self.att_btn.config(text=f"{tr('Вложения (')}{n_att})" if n_att else tr('Вложения'))
 
     def _show_password(self, e):
         self.dvars["password"].set(e["password"] if self.pw_visible else "•" * 10)
-        self.pw_btn.config(text="Скрыть" if self.pw_visible else "Показать")
+        self.pw_btn.config(text=tr('Скрыть') if self.pw_visible else tr('Показать'))
         bits, text, level = strength(e["password"])
         self.pw_bar["value"] = min(100, bits)
         self.pw_bar.configure(style=f"{LEVEL_STYLE[level]}.Horizontal.TProgressbar")
-        self.pw_bar_lbl.config(text=f"Надёжность: {text}")
+        self.pw_bar_lbl.config(text=f"{tr('Надёжность: ')}{tr(text)}")
         self._render_custom(e)
 
     def toggle_pw(self):
@@ -3452,9 +3521,9 @@ class App:
         try:
             code = totp_now(e["totp"])
             left = 30 - int(time.time()) % 30
-            self.dvars["totp"].set(f"{code[:3]} {code[3:]}   ({left} с)")
+            self.dvars["totp"].set(f"{code[:3]} {code[3:]}   ({left}{tr(' с)')}")
         except Exception:
-            self.dvars["totp"].set("ключ 2FA не распознан")
+            self.dvars["totp"].set(tr('ключ 2FA не распознан'))
 
     def _totp_tick(self):
         if self.vault.unlocked:
@@ -3478,25 +3547,25 @@ class App:
         act = v.active()
         ins = self.side.insert
         self.side.delete(*self.side.get_children())
-        ins("", "end", iid="all", text=f"  ▤   Все пароли  ({len(act)})")
-        ins("", "end", iid="fav", text=f"  ★   Избранное  ({sum(1 for e in act if e['favorite'])})")
+        ins("", "end", iid="all", text=f"{tr('  ▤   Все пароли  (')}{len(act)})")
+        ins("", "end", iid="fav", text=f"{tr('  ★   Избранное  (')}{sum((1 for e in act if e['favorite']))})")
         cats = v.categories()
         unc = sum(1 for e in act if not e["category"])
         if cats or unc:
-            ins("", "end", iid="h_cat", text="   КАТЕГОРИИ", tags=("head",))
+            ins("", "end", iid="h_cat", text=tr('   КАТЕГОРИИ'), tags=("head",))
             for c in cats:
                 n = sum(1 for e in act if e["category"] == c)
                 ins("", "end", iid="cat:" + c, text=f"  ◇   {c}  ({n})")
             if unc:
-                ins("", "end", iid="uncat", text=f"  —   Без категории  ({unc})")
+                ins("", "end", iid="uncat", text=f"{tr('  —   Без категории  (')}{unc})")
         tags = sorted({x for e in act for x in split_tags(e["tags"])}, key=str.lower)
         if tags:
-            ins("", "end", iid="h_tag", text="   ТЕГИ", tags=("head",))
+            ins("", "end", iid="h_tag", text=tr('   ТЕГИ'), tags=("head",))
             for tg in tags:
                 n = sum(1 for e in act if tg.lower() in [x.lower() for x in split_tags(e["tags"])])
                 ins("", "end", iid="tag:" + tg, text=f"  #   {tg}  ({n})")
-        ins("", "end", iid="h_sys", text="   СИСТЕМА", tags=("head",))
-        ins("", "end", iid="trash", text=f"  ⌫   Корзина  ({len(v.trash())})")
+        ins("", "end", iid="h_sys", text=tr('   СИСТЕМА'), tags=("head",))
+        ins("", "end", iid="trash", text=f"{tr('  ⌫   Корзина  (')}{len(v.trash())})")
         if not self.side.exists(self.cat_filter):
             self.cat_filter = "all"
         self.side.selection_set(self.cat_filter)
@@ -3558,19 +3627,18 @@ class App:
         if prev and self.tree.exists(prev[0]):
             self.tree.selection_set(prev[0])
         total = len(self.vault.active()) if self.cat_filter != "trash" else len(self.vault.trash())
-        self.status_right.config(text=f"Показано: {len(items)} из {total}")
+        self.status_right.config(text=f"{tr('Показано: ')}{len(items)}{tr(' из ')}{total}")
         if items:
             self.empty_lbl.place_forget()
         else:
             if q:
-                msg = "Ничего не найдено"
+                msg = tr('Ничего не найдено')
             elif self.cat_filter == "trash":
-                msg = "Корзина пуста"
+                msg = tr('Корзина пуста')
             elif self.cat_filter == "all":
-                msg = ("Здесь пока пусто.\nНажмите «＋ Добавить» или импортируйте пароли\n"
-                       "из браузера: Файл → Импорт из CSV…")
+                msg = (tr('Здесь пока пусто.\nНажмите «＋ Добавить» или импортируйте пароли\nиз браузера: Файл → Импорт из CSV…'))
             else:
-                msg = "В этом разделе пока нет записей"
+                msg = tr('В этом разделе пока нет записей')
             self.empty_lbl.config(text=msg)
             self.empty_lbl.place(relx=0.5, rely=0.38, anchor="center")
         self.show_details()
@@ -3594,16 +3662,16 @@ class App:
         m = self.ctx
         m.delete(0, "end")
         if e["deleted"]:
-            m.add_command(label="Восстановить", command=self.restore)
-            m.add_command(label="Удалить навсегда", command=self.purge)
+            m.add_command(label=tr('Восстановить'), command=self.restore)
+            m.add_command(label=tr('Удалить навсегда'), command=self.purge)
         else:
-            m.add_command(label="Копировать пароль", command=self.copy_password)
-            m.add_command(label="Копировать логин", command=self.copy_login)
-            m.add_command(label="Открыть сайт", command=self.open_url)
+            m.add_command(label=tr('Копировать пароль'), command=self.copy_password)
+            m.add_command(label=tr('Копировать логин'), command=self.copy_login)
+            m.add_command(label=tr('Открыть сайт'), command=self.open_url)
             m.add_separator()
-            m.add_command(label="Изменить", command=self.edit)
-            m.add_command(label="В избранное / убрать", command=self.toggle_fav)
-            m.add_command(label="Удалить", command=self.delete)
+            m.add_command(label=tr('Изменить'), command=self.edit)
+            m.add_command(label=tr('В избранное / убрать'), command=self.toggle_fav)
+            m.add_command(label=tr('Удалить'), command=self.delete)
         m.tk_popup(event.x_root, event.y_root)
 
     # ---------------- действия с записями
@@ -3642,8 +3710,7 @@ class App:
             return
         if e["deleted"]:
             return self.purge()
-        if messagebox.askyesno(APP_NAME, f"Переместить «{e['title']}» в корзину?\n"
-                               f"Запись хранится {TRASH_DAYS} дней.", parent=self.root):
+        if messagebox.askyesno(tr(APP_NAME), f"{tr('Переместить «')}{e['title']}{tr('» в корзину?\nЗапись хранится ')}{TRASH_DAYS}{tr(' дней.')}", parent=self.root):
             ok, _ = self._do(self.vault.soft_delete, e["id"])
             if ok:
                 self.refresh_all()
@@ -3659,8 +3726,7 @@ class App:
 
     def purge(self):
         e = self.selected()
-        if e and messagebox.askyesno(APP_NAME, f"Удалить «{e['title']}» навсегда?\n"
-                                     "Это действие нельзя отменить.", parent=self.root):
+        if e and messagebox.askyesno(tr(APP_NAME), f"{tr('Удалить «')}{e['title']}{tr('» навсегда?\nЭто действие нельзя отменить.')}", parent=self.root):
             ok, _ = self._do(self.vault.purge, e["id"])
             if ok:
                 self.refresh_all()
@@ -3668,7 +3734,7 @@ class App:
 
     def empty_trash(self):
         n = len(self.vault.trash())
-        if n and messagebox.askyesno(APP_NAME, f"Удалить навсегда записей: {n}?", parent=self.root):
+        if n and messagebox.askyesno(tr(APP_NAME), f"{tr('Удалить навсегда записей: ')}{n}?", parent=self.root):
             ok, _ = self._do(self.vault.empty_trash)
             if ok:
                 self.refresh_all()
@@ -3677,20 +3743,20 @@ class App:
     def copy_password(self):
         e = self.selected()
         if e:
-            self.copy_text(e["password"], "Пароль")
+            self.copy_text(e["password"], tr('Пароль'))
 
     def copy_login(self):
         e = self.selected()
         if e:
-            self.copy_text(e["login"], "Логин")
+            self.copy_text(e["login"], tr('Логин'))
 
     def copy_totp(self):
         e = self.selected()
         if e and e["totp"]:
             try:
-                self.copy_text(totp_now(e["totp"]), "Код 2FA")
+                self.copy_text(totp_now(e["totp"]), tr('Код 2FA'))
             except Exception:
-                messagebox.showwarning(APP_NAME, "Ключ 2FA не распознан.", parent=self.root)
+                messagebox.showwarning(tr(APP_NAME), tr('Ключ 2FA не распознан.'), parent=self.root)
 
     def open_url(self):
         e = self.selected()
@@ -3698,7 +3764,7 @@ class App:
             return
         url = e["url"] if "://" in e["url"] else "https://" + e["url"]
         if urlparse(url).scheme not in ("http", "https"):
-            messagebox.showwarning(APP_NAME, "Открываются только ссылки http/https.", parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), tr('Открываются только ссылки http/https.'), parent=self.root)
             return
         webbrowser.open(url)
 
@@ -3715,8 +3781,8 @@ class App:
     # ---------------- импорт / экспорт / восстановление
     def import_csv(self):
         path = filedialog.askopenfilename(
-            parent=self.root, title="Выберите CSV или Excel-файл с паролями",
-            filetypes=[("CSV и Excel", "*.csv *.xlsx"), ("Все файлы", "*.*")])
+            parent=self.root, title=tr('Выберите CSV или Excel-файл с паролями'),
+            filetypes=[(tr('CSV и Excel'), "*.csv *.xlsx"), (tr('Все файлы'), "*.*")])
         if not path:
             return
         try:
@@ -3727,14 +3793,13 @@ class App:
                     raw = f.read()
             source, items, skipped = parse_csv(raw)
         except (OSError, ValueError) as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось прочитать файл:\n{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{ex}", parent=self.root)
             return
         if not items:
-            messagebox.showinfo(APP_NAME, "В файле не найдено записей с паролями.", parent=self.root)
+            messagebox.showinfo(tr(APP_NAME), tr('В файле не найдено записей с паролями.'), parent=self.root)
             return
         if not messagebox.askyesno(
-                APP_NAME, f"Источник: {source}\nНайдено записей: {len(items)}\n"
-                          f"Пропущено строк (пустые, карты, заметки): {skipped}\n\nИмпортировать?",
+                tr(APP_NAME), f"{tr('Источник: ')}{source}{tr('\nНайдено записей: ')}{len(items)}{tr('\nПропущено строк (пустые, карты, заметки): ')}{skipped}{tr('\n\nИмпортировать?')}",
                 parent=self.root):
             return
         ok, res = self._do(self.vault.bulk_add, items, source)
@@ -3743,89 +3808,84 @@ class App:
         added, dup = res
         self.refresh_all()
         self.saved_note()
-        messagebox.showinfo(APP_NAME, f"Добавлено: {added}\nПовторов пропущено: {dup}",
+        messagebox.showinfo(tr(APP_NAME), f"{tr('Добавлено: ')}{added}{tr('\nПовторов пропущено: ')}{dup}",
                             parent=self.root)
         if messagebox.askyesno(
-                APP_NAME, "Файл хранит пароли в открытом виде.\n"
-                          "Удалить его с диска сейчас (содержимое будет перезаписано)?",
+                tr(APP_NAME), tr('Файл хранит пароли в открытом виде.\nУдалить его с диска сейчас (содержимое будет перезаписано)?'),
                 parent=self.root):
             try:
                 shred_file(path)
             except OSError as ex:
-                messagebox.showwarning(APP_NAME, f"Не удалось удалить файл:\n{ex}", parent=self.root)
+                messagebox.showwarning(tr(APP_NAME), f"{tr('Не удалось удалить файл:\n')}{ex}", parent=self.root)
 
     def export_encrypted(self):
         path = filedialog.asksaveasfilename(
-            parent=self.root, title="Сохранить зашифрованную копию", defaultextension=".dat",
+            parent=self.root, title=tr('Сохранить зашифрованную копию'), defaultextension=".dat",
             initialfile="moi-paroli-" + datetime.now().strftime("%Y-%m-%d") + ".dat",
-            filetypes=[("Хранилище", "*.dat")])
+            filetypes=[(tr('Хранилище'), "*.dat")])
         if path:
             try:
                 shutil.copyfile(self.vault.path, path)
-                messagebox.showinfo(APP_NAME, "Копия сохранена. Она зашифрована тем же "
-                                    "мастер-паролем.", parent=self.root)
+                messagebox.showinfo(tr(APP_NAME), tr('Копия сохранена. Она зашифрована тем же мастер-паролем.'), parent=self.root)
             except OSError as ex:
-                messagebox.showerror(APP_NAME, f"Ошибка: {ex}", parent=self.root)
+                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.root)
 
     def export_csv(self):
         if not messagebox.askyesno(
-                APP_NAME, "В CSV пароли будут записаны открытым текстом.\n"
-                          "Любой, кто получит файл, сможет их прочитать. Продолжить?",
+                tr(APP_NAME), tr('В CSV пароли будут записаны открытым текстом.\nЛюбой, кто получит файл, сможет их прочитать. Продолжить?'),
                 icon="warning", parent=self.root):
             return
-        pw = simpledialog.askstring(APP_NAME, "Введите мастер-пароль для подтверждения:",
+        pw = simpledialog.askstring(APP_NAME, tr('Введите мастер-пароль для подтверждения:'),
                                     show="•", parent=self.root)
         if not pw:
             return
         if not self.vault.verify_password(pw):
-            messagebox.showerror(APP_NAME, "Неверный мастер-пароль.", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), tr('Неверный мастер-пароль.'), parent=self.root)
             return
-        path = filedialog.asksaveasfilename(parent=self.root, title="Сохранить CSV",
+        path = filedialog.asksaveasfilename(parent=self.root, title=tr('Сохранить CSV'),
                                             defaultextension=".csv", filetypes=[("CSV", "*.csv")])
         if path:
             try:
                 with open(path, "w", encoding="utf-8-sig", newline="") as f:
                     f.write(export_csv_text(self.vault.active()))
-                messagebox.showinfo(APP_NAME, "Файл сохранён. Не забудьте удалить его "
-                                    "после использования.", parent=self.root)
+                messagebox.showinfo(tr(APP_NAME), tr('Файл сохранён. Не забудьте удалить его после использования.'), parent=self.root)
             except OSError as ex:
-                messagebox.showerror(APP_NAME, f"Ошибка: {ex}", parent=self.root)
+                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.root)
 
     def restore_backup(self):
         start = self.vault.backups_dir()
         path = filedialog.askopenfilename(
-            parent=self.root, title="Выберите резервную копию",
+            parent=self.root, title=tr('Выберите резервную копию'),
             initialdir=start if os.path.isdir(start) else os.path.dirname(self.vault.path),
-            filetypes=[("Хранилище", "*.dat *.bak"), ("Все файлы", "*.*")])
+            filetypes=[(tr('Хранилище'), "*.dat *.bak"), (tr('Все файлы'), "*.*")])
         if not path:
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
                 blob = json.load(f)
             if not (isinstance(blob, dict) and blob.get("magic") in ("passvault", "passvault-v1")):
-                raise ValueError("это не файл хранилища")
+                raise ValueError(tr('это не файл хранилища'))
         except (OSError, ValueError) as ex:
-            messagebox.showerror(APP_NAME, f"Файл не подходит:\n{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Файл не подходит:\n')}{ex}", parent=self.root)
             return
-        backup_password = simpledialog.askstring(APP_NAME, "Мастер-пароль резервной копии:",
+        backup_password = simpledialog.askstring(APP_NAME, tr('Мастер-пароль резервной копии:'),
                                                    show="•", parent=self.root)
         if backup_password is None:
             return
         try:
             keydata = None
             if Vault.header_needs_keyfile(path):
-                keypath = filedialog.askopenfilename(parent=self.root, title="Ключевой файл резервной копии")
+                keypath = filedialog.askopenfilename(parent=self.root, title=tr('Ключевой файл резервной копии'))
                 if not keypath:
                     return
                 with open(keypath, "rb") as key:
                     keydata = key.read()
             Vault.validate_backup(path, backup_password, keydata)
         except (VaultError, OSError, ValueError) as ex:
-            messagebox.showerror(APP_NAME, f"Копия не прошла проверку: {ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Копия не прошла проверку: ')}{ex}", parent=self.root)
             return
         if not messagebox.askyesno(
-                APP_NAME, "Текущие данные будут заменены выбранной копией.\n"
-                          "Прежний файл сохранится как vault.dat.before-restore.\n\nПродолжить?",
+                tr(APP_NAME), tr('Текущие данные будут заменены выбранной копией.\nПрежний файл сохранится как vault.dat.before-restore.\n\nПродолжить?'),
                 parent=self.root):
             return
         try:
@@ -3834,33 +3894,32 @@ class App:
             shutil.copyfile(path, staged)
             os.replace(staged, self.vault.path)
         except OSError as ex:
-            messagebox.showerror(APP_NAME, f"Не удалось восстановить:\n{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось восстановить:\n')}{ex}", parent=self.root)
             return
-        messagebox.showinfo(APP_NAME, "Копия восстановлена. Войдите мастер-паролем этой копии.",
+        messagebox.showinfo(tr(APP_NAME), tr('Копия восстановлена. Войдите мастер-паролем этой копии.'),
                             parent=self.root)
         self.lock()
 
     def change_master(self):
-        old = simpledialog.askstring(APP_NAME, "Текущий мастер-пароль:", show="•", parent=self.root)
+        old = simpledialog.askstring(APP_NAME, tr('Текущий мастер-пароль:'), show="•", parent=self.root)
         if not old:
             return
         if not self.vault.verify_password(old):
-            messagebox.showerror(APP_NAME, "Неверный мастер-пароль.", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), tr('Неверный мастер-пароль.'), parent=self.root)
             return
-        p1 = simpledialog.askstring(APP_NAME, "Новый мастер-пароль:", show="•", parent=self.root)
+        p1 = simpledialog.askstring(APP_NAME, tr('Новый мастер-пароль:'), show="•", parent=self.root)
         if not p1:
             return
         if len(p1) < MIN_MASTER_LEN:
-            messagebox.showwarning(APP_NAME, f"Минимум {MIN_MASTER_LEN} символов.", parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), f"{tr('Минимум ')}{MIN_MASTER_LEN}{tr(' символов.')}", parent=self.root)
             return
-        if p1 != simpledialog.askstring(APP_NAME, "Повторите новый пароль:", show="•",
+        if p1 != simpledialog.askstring(APP_NAME, tr('Повторите новый пароль:'), show="•",
                                         parent=self.root):
-            messagebox.showwarning(APP_NAME, "Пароли не совпадают.", parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), tr('Пароли не совпадают.'), parent=self.root)
             return
         ok, _ = self._do(self.vault.change_password, p1)
         if ok:
-            messagebox.showinfo(APP_NAME, "Мастер-пароль изменён, хранилище пересохранено.\n"
-                                "Старые резервные копии в папке backups остались под прежним паролем.",
+            messagebox.showinfo(tr(APP_NAME), tr('Мастер-пароль изменён, хранилище пересохранено.\nСтарые резервные копии в папке backups остались под прежним паролем.'),
                                 parent=self.root)
 
     def open_data_dir(self):
@@ -3868,7 +3927,7 @@ class App:
         if hasattr(os, "startfile"):
             os.startfile(d)  # только Windows
         else:
-            messagebox.showinfo(APP_NAME, d, parent=self.root)
+            messagebox.showinfo(tr(APP_NAME), d, parent=self.root)
 
     def run(self):
         self.root.mainloop()
@@ -3876,10 +3935,10 @@ class App:
 
 def main():
     if tk is None:
-        print("Не найден tkinter. Установите Python с python.org (компонент tcl/tk).")
+        print(tr('Не найден tkinter. Установите Python с python.org (компонент tcl/tk).'))
         sys.exit(1)
     if not win_single_instance():
-        win_message("«Мои пароли» уже запущены. Найдите значок программы в области уведомлений (трей).")
+        win_message(tr('«Мои пароли» уже запущены. Найдите значок программы в области уведомлений (трей).'))
         sys.exit(0)
     App().run()
 

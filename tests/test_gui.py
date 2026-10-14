@@ -37,6 +37,22 @@ class DesktopTests(unittest.TestCase):
                 self.app.root.after(100, self.close_dialog)
                 cls(self.app, self.app.root)
 
+    def test_language_switch_and_animation_finish(self):
+        self.app.set_language('en')
+        self.app.root.update()
+        self.assertEqual(self.app.root.title(),'My Passwords')
+        self.assertEqual(self.app.tree.heading('category')['text'],'Category')
+        self.app.animate_entry()
+        self.app.root.after(350,self.app.root.quit)
+        self.app.root.mainloop()
+        self.assertAlmostEqual(float(self.app.root.attributes('-alpha')),1.0)
+        self.assertIsNone(self.app._animation_id)
+        self.app.settings.set('animations',False)
+        self.app.animate_entry()
+        self.assertIsNone(self.app._animation_id)
+        self.app.set_language('ru')
+        self.assertEqual(self.app.tree.heading('category')['text'],'Категория')
+
     def test_search_theme_and_lock(self):
         row = self.app.vault.add({"title": "Example", "login": "demo", "password": "Example!789"})
         self.app.refresh_all()

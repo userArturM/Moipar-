@@ -35,9 +35,9 @@ jobs:
         shell: pwsh
         run: ./tools/build_hello.ps1
       - name: Portable EXE
-        run: pyinstaller --onefile --noconsole --name MoiParoli --icon icon.ico --collect-submodules pystray --hidden-import pystray._win32 --add-binary "dist/hello_verify.exe;." moi_paroli.py
+        run: pyinstaller --onefile --noconsole --name MoiParoli --icon icon.ico --add-data "icon.ico;." --add-data "translations.json;." --collect-submodules pystray --hidden-import pystray._win32 --add-binary "dist/hello_verify.exe;." moi_paroli.py
       - name: Browser host
-        run: pyinstaller --onefile --console --name browser_host browser_host.py
+        run: pyinstaller --onefile --console --name browser_host --add-data "translations.json;." browser_host.py
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Installer EXE
