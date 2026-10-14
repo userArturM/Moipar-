@@ -6,7 +6,9 @@ $ErrorActionPreference = 'Stop'
 if ($ExtensionId -cnotmatch '^[a-p]{32}$') { throw 'Неверный идентификатор расширения Chrome/Яндекс.' }
 $HostExe = [System.IO.Path]::GetFullPath($HostExe)
 if (-not (Test-Path -LiteralPath $HostExe -PathType Leaf)) { throw 'browser_host.exe не найден; сначала выполните сборку.' }
-$manifestPath = Join-Path (Split-Path $HostExe -Parent) 'browser_host_manifest.json'
+$manifestDirectory = Join-Path $env:APPDATA 'MoiParoli\native'
+New-Item -ItemType Directory -Path $manifestDirectory -Force | Out-Null
+$manifestPath = Join-Path $manifestDirectory 'browser_host_manifest.json'
 $manifest = @{
     name='ru.moiparoli.host'
     description='Moi Paroli approved autofill'
@@ -21,3 +23,4 @@ foreach ($browser in @('Google\Chrome', 'Yandex\YandexBrowser')) {
     Set-Item -Path $key -Value $manifestPath
 }
 Write-Host "Native Messaging host зарегистрирован: $manifestPath"
+

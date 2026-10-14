@@ -52,7 +52,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.1"
+APP_VERSION = "4.2"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 10
@@ -477,8 +477,8 @@ class Vault:
 
     @staticmethod
     def _fp(entries, tombstones):
-        data = sorted((e["id"], stamp(e)) for e in entries) + sorted(tombstones.items())
-        return hashlib.sha256(json.dumps(data).encode("utf-8")).hexdigest()
+        data = [sorted(entries, key=lambda e: e["id"]), sorted(tombstones.items())]
+        return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
     @staticmethod
     def _record_hash(record):
@@ -511,13 +511,65 @@ class Vault:
         by_id = {e["id"]: e for e in r_entries}
         for e in self.entries:
             r = by_id.get(e["id"])
-            if r is None or stamp(e) >= stamp(r):
+            base = self._base_entries.get(e["id"])
+            if self._record_hash(e) == base:
+                continue
+            if r is None or self._record_hash(r) == base or stamp(e) >= stamp(r):
                 by_id[e["id"]] = e
         self.entries = [e for e in by_id.values()
                         if not (e["id"] in tomb and stamp(e) <= tomb[e["id"]])]
         cats = list(r_meta.get("categories") or []) + list(self.meta.get("categories") or [])
         self.meta["categories"] = list(dict.fromkeys(cats))
         self.meta["tombstones"] = tomb
+
+    def conflict_snapshot(self):
+        sig = self._disk_sig()
+        remote, meta = self._read_remote()
+        if self._disk_sig() != sig:
+            raise SyncConflict("Хранилище снова изменилось. Повторите сравнение.")
+        local = {e["id"]: e for e in self.entries}
+        other = {e["id"]: e for e in remote}
+        conflicts = []
+        for item_id in set(local) | set(other) | set(self._base_entries):
+            base = self._base_entries.get(item_id)
+            lhs, rhs = self._record_hash(local.get(item_id)), self._record_hash(other.get(item_id))
+            if lhs != base and rhs != base and lhs != rhs:
+                conflicts.append({"id": item_id, "local": local.get(item_id), "remote": other.get(item_id)})
+        return json.loads(json.dumps({"sig": sig, "local_fp": self._fp(self.entries, self.meta.get("tombstones", {})),
+                                      "conflicts": conflicts}, ensure_ascii=False))
+
+    def resolve_conflicts(self, snapshot, choices):
+        if self._disk_sig() != tuple(snapshot["sig"]):
+            raise SyncConflict("Хранилище снова изменилось. Повторите сравнение.")
+        if self._fp(self.entries, self.meta.get("tombstones", {})) != snapshot["local_fp"]:
+            raise SyncConflict("Локальные записи изменились. Повторите сравнение.")
+        conflicts = snapshot["conflicts"]
+        if set(choices) != {c["id"] for c in conflicts} or any(
+                value not in ("local", "remote", "both") for value in choices.values()):
+            raise ValueError("Выберите вариант для каждого конфликта")
+        remote, meta = self._read_remote()
+        if self._disk_sig() != tuple(snapshot["sig"]):
+            raise SyncConflict("Хранилище снова изменилось. Повторите сравнение.")
+        self._merge(remote, meta)
+        for conflict in conflicts:
+            item_id = conflict["id"]
+            mode = choices[item_id]
+            self.entries = [e for e in self.entries if e["id"] != item_id]
+            selected = [conflict["local"]] if mode == "local" else [conflict["remote"]]
+            if mode == "both":
+                selected = [conflict["remote"], conflict["local"]]
+            selected = [json.loads(json.dumps(e)) for e in selected if e is not None]
+            for index, entry in enumerate(selected):
+                if index:
+                    entry["id"] = uuid.uuid4().hex
+                    entry["title"] += " (локальная копия)"
+                self._touch(entry)
+                self.entries.append(entry)
+                self.meta["tombstones"].pop(entry["id"], None)
+        if self._disk_sig() != tuple(snapshot["sig"]):
+            raise SyncConflict("Хранилище снова изменилось. Повторите сравнение.")
+        self._sig = tuple(snapshot["sig"])
+        self.save(check_external=False)
 
     def sync_from_disk(self, write=True):
         """Подтянуть изменения, сделанные другим компьютером. True — локальные данные изменились."""
@@ -1310,71 +1362,7 @@ def dark_titlebar(window, enable=True):
         pass
 
 
-ICON_B64 = (
-    "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"
-)
+ICON_B64 = ("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")
 
 
 # ==========================================================================
@@ -1407,6 +1395,67 @@ def _new_top(app, parent, title):
     if app.settings.get("protect_capture"):
         win_capture_protect(top, True)
     return top
+
+
+class ConflictDialog:
+    def __init__(self, app, snapshot):
+        self.result = None
+        self.choices = {}
+        conflicts = snapshot["conflicts"]
+        top = _new_top(app, app.root, "Разрешить конфликты")
+        frame = ttk.Frame(top, padding=24)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Выберите версию записи", font=(FF, 18, "bold")).pack(anchor="w")
+        ttk.Label(frame, text="Пароли скрыты. Сохранение обеих версий создаёт отдельную запись.",
+                  wraplength=560, foreground=app.t["muted"]).pack(anchor="w", pady=(5, 18))
+        heading = ttk.Label(frame, font=(FF, 12, "bold"))
+        heading.pack(anchor="w")
+        summary = ttk.Frame(frame)
+        summary.pack(fill="x", pady=14)
+        labels = []
+        for column, title in enumerate(("На этом компьютере", "В файле на диске")):
+            summary.columnconfigure(column, weight=1, uniform="version")
+            panel = ttk.Frame(summary, style="Card.TFrame", padding=16)
+            panel.grid(row=0, column=column, sticky="nsew", padx=(0, 8))
+            ttk.Label(panel, text=title, style="Card.TLabel", font=(FF, 10, "bold")).pack(anchor="w")
+            label = ttk.Label(panel, style="CardMuted.TLabel", wraplength=240, justify="left")
+            label.pack(anchor="w", pady=(10, 0))
+            labels.append(label)
+        choice = tk.StringVar(value="both")
+        for value, text in (("both", "Сохранить обе версии"), ("local", "Оставить локальную"),
+                            ("remote", "Взять версию с диска")):
+            ttk.Radiobutton(frame, text=text, value=value, variable=choice).pack(anchor="w", pady=4)
+        current = [0]
+        def render():
+            conflict = conflicts[current[0]]
+            entry = conflict["local"] or conflict["remote"] or {}
+            heading.config(text=f'{current[0] + 1} / {len(conflicts)} · {entry.get("title", "Удалённая запись")}')
+            for label, key in zip(labels, ("local", "remote")):
+                entry = conflict[key]
+                text = "Запись удалена" if entry is None else (
+                    f'Логин: {entry.get("login", "")}\nКатегория: {entry.get("category", "")}\n'
+                    f'Изменено: {entry.get("updated", "")}\nВложений: {len(entry.get("attachments", []))}\n'
+                    f'Пароль: {"есть" if entry.get("password") else "отсутствует"}')
+                label.config(text=text)
+            choice.set("both")
+            save.config(text="Сохранить решения" if current[0] == len(conflicts)-1 else "Следующая запись")
+        def advance():
+            self.choices[conflicts[current[0]]["id"]] = choice.get()
+            if current[0] + 1 == len(conflicts):
+                self.result = self.choices
+                top.destroy()
+            else:
+                current[0] += 1
+                render()
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(20, 0))
+        ttk.Button(buttons, text="Отмена", command=top.destroy).pack(side="right")
+        save = ttk.Button(buttons, style="Accent.TButton", command=advance)
+        save.pack(side="right", padx=8)
+        top.bind("<Escape>", lambda event: top.destroy())
+        render()
+        top.grab_set()
+        app.root.wait_window(top)
 
 
 class GeneratorDialog:
@@ -2154,7 +2203,8 @@ class App:
         self._sync_at = 0.0
         geo = str(self.settings.get("geometry") or "")
         self.root.geometry(geo if re.fullmatch(r"\d+x\d+(?:[+-]-?\d+){0,2}", geo) else "1360x820")
-        self.root.minsize(1240, 720)
+        self.root.minsize(min(1240, self.root.winfo_screenwidth()-80),
+                          min(720, self.root.winfo_screenheight()-100))
         self.icon = self.logo = None
         try:
             self.icon = tk.PhotoImage(data=ICON_B64)
@@ -2355,6 +2405,9 @@ class App:
     def _sync_now(self):
         try:
             changed = self.vault.sync_from_disk()
+        except SyncConflict:
+            self.set_status("Конфликт записей: Инструменты → Разрешить конфликты", self.t["warn"])
+            return
         except KeyChanged:
             messagebox.showwarning(APP_NAME, "Хранилище изменено на другом устройстве с другим "
                                    "мастер-паролем или ключевым файлом.\nВойдите заново.", parent=self.root)
@@ -2624,6 +2677,9 @@ class App:
     def _do(self, fn, *args):
         try:
             res = fn(*args)
+        except SyncConflict:
+            self.resolve_conflicts()
+            return False, None
         except KeyChanged:
             messagebox.showwarning(APP_NAME, "Хранилище изменено на другом устройстве с другим "
                                    "мастер-паролем или ключевым файлом.\nВойдите заново.", parent=self.root)
@@ -2634,6 +2690,21 @@ class App:
             return False, None
         self._after_merge()
         return True, res
+
+    def resolve_conflicts(self):
+        try:
+            snapshot = self.vault.conflict_snapshot()
+            if not snapshot["conflicts"]:
+                self.vault.sync_from_disk()
+                return
+            dialog = ConflictDialog(self, snapshot)
+            if dialog.result is None:
+                return
+            self.vault.resolve_conflicts(snapshot, dialog.result)
+            self.refresh_all()
+            self.set_status("Конфликты разрешены. Выбранные версии сохранены.")
+        except (VaultError, OSError, ValueError) as ex:
+            messagebox.showwarning(APP_NAME, str(ex), parent=self.root)
 
     def set_status(self, text, color=None):
         self.status_left.config(text=text, foreground=color or self.t["good"])
@@ -2818,7 +2889,7 @@ class App:
         err_label.config(text="Ожидание подтверждения Windows Hello…", foreground=self.t["muted"])
         def work():
             try:
-                if not asyncio.run(self.hello.verify(hwnd)):
+                if not self.hello.verify(hwnd):
                     self._q.put(lambda: err_label.config(text="Подтверждение Windows Hello отменено"))
                     return
                 password = self.hello.retrieve_after_verification()
@@ -2865,7 +2936,7 @@ class App:
         def work():
             import asyncio
             try:
-                if not asyncio.run(self.hello.verify(hwnd)):
+                if not self.hello.verify(hwnd):
                     self._q.put(lambda: messagebox.showwarning("Windows Hello", "Проверка не пройдена."))
                     return
                 self.hello.enroll(password)
@@ -2886,9 +2957,11 @@ class App:
         head = ttk.Frame(f, style="Panel.TFrame", padding=(24, 14))
         head.pack(fill="x")
         ttk.Label(head, text="◈  Мои пароли", style="Title.TLabel").pack(side="left", padx=(0, 24))
+        menus = ttk.Frame(f, style="Panel.TFrame", padding=(24, 0, 24, 8))
+        menus.pack(fill="x")
         for text, menu in (("Файл", self._file_menu()), ("Инструменты", self._tools_menu()),
                            ("Справка", self._help_menu())):
-            ttk.Menubutton(head, text=text, menu=menu).pack(side="left", padx=3)
+            ttk.Menubutton(menus, text=text, menu=menu).pack(side="left", padx=3)
         ttk.Button(head, text="Заблокировать", command=self.lock).pack(side="right")
         ttk.Button(head, text="Светлая / тёмная", command=self.toggle_theme).pack(side="right", padx=8)
 
@@ -2949,13 +3022,20 @@ class App:
         lst = ttk.Frame(center, style="Panel.TFrame")
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
+        horizontal = ttk.Scrollbar(lst, orient="horizontal")
+        horizontal.pack(side="bottom", fill="x")
         self.tree = ttk.Treeview(lst, columns=cols, show="headings", selectmode="browse")
+        from tkinter import font as tkfont
+        column_font = tkfont.Font(family=FF, size=10)
         for key, name, width in self.COLUMNS:
             self.tree.heading(key, text=name, command=lambda k=key: self.sort_by(k))
-            self.tree.column(key, width=width, anchor="center" if key == "fav" else "w",
+            minimum = max(width, column_font.measure(name) + 32)
+            self.tree.column(key, width=minimum, minwidth=minimum, anchor="center" if key == "fav" else "w",
                              stretch=(key != "fav"))
         sb = ttk.Scrollbar(lst, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
+        self.tree.configure(xscrollcommand=horizontal.set)
+        horizontal.configure(command=self.tree.xview)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         self.empty_lbl = ttk.Label(lst, text="", style="Muted.TLabel", justify="center",
@@ -3018,6 +3098,7 @@ class App:
 
     def _tools_menu(self):
         m = self._menu()
+        m.add_command(label="Разрешить конфликты…", command=self.resolve_conflicts)
         m.add_command(label="Быстрый поиск", command=self.quick_search)
         m.add_command(label="Аудит безопасности…", command=self.audit)
         m.add_command(label="Проверка на утечки (интернет)…", command=self.check_breaches)

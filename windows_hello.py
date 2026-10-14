@@ -4,7 +4,6 @@ IMPORTANT: DPAPI is scoped to the Windows login, not cryptographically bound to 
 Windows Hello gesture. Malware running as that same user can potentially access the
 DPAPI-protected credential. Do not treat this as hardware-bound key protection.
 """
-import asyncio
 import ctypes
 from ctypes import wintypes
 import hashlib
@@ -115,7 +114,7 @@ class HelloUnlock:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    async def verify(self, hwnd=None):
+    def verify(self, hwnd=None):
         _require_windows()
         if not hwnd:
             raise HelloUnavailable('Для Windows Hello требуется окно приложения')
@@ -124,7 +123,7 @@ class HelloUnlock:
         if not helper.is_file():
             raise HelloUnavailable('Компонент Windows Hello не собран. Используйте мастер-пароль.')
         try:
-            result = await asyncio.to_thread(subprocess.run, [str(helper), str(int(hwnd))],
+            result = subprocess.run([str(helper), str(int(hwnd))],
                                              creationflags=subprocess.CREATE_NO_WINDOW,
                                              check=False, timeout=120)
         except (OSError, subprocess.TimeoutExpired) as exc:

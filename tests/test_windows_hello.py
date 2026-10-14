@@ -2,12 +2,35 @@ import json
 import os
 import tempfile
 import unittest
+import asyncio
+import subprocess
 from unittest.mock import patch
 
 from windows_hello import HelloUnlock, HelloUnavailable
 
 
 class HelloTests(unittest.TestCase):
+    def test_cancel_and_unavailable(self):
+        for code, expected in ((0, True), (1, False), (2, None), (3, None)):
+            with self.subTest(code=code), patch("windows_hello.Path.is_file", return_value=True), patch(
+                    "windows_hello.subprocess.run", return_value=subprocess.CompletedProcess([],code)):
+                if expected is None:
+                    with self.assertRaises(HelloUnavailable):
+                        self.hello.verify(1)
+                else:
+                    self.assertEqual(self.hello.verify(1), expected)
+
+    def test_changed_master_password_rejects_saved_credential(self):
+        self.hello.enroll("TestPassword!789")
+        with open(self.vault, "r+", encoding="utf-8") as handle:
+            data=json.load(handle)
+            data["kdf"]["salt"]="changed-master-key"
+            handle.seek(0)
+            json.dump(data,handle)
+            handle.truncate()
+        with self.assertRaises(HelloUnavailable):
+            self.hello.retrieve_after_verification()
+
     def test_dpapi_roundtrip_on_windows(self):
         import sys
         if sys.platform != 'win32':

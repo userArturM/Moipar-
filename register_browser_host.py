@@ -23,7 +23,9 @@ def make_manifest(extension_id, host_exe):
 def register(extension_id, host_exe):
     import winreg
     manifest = make_manifest(extension_id, host_exe)
-    directory = os.path.dirname(os.path.abspath(host_exe))
+    root = os.environ.get('APPDATA') or os.path.dirname(os.path.abspath(host_exe))
+    directory = os.path.join(root, 'MoiParoli', 'native')
+    os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, 'browser_host_manifest.json')
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
@@ -37,3 +39,4 @@ if __name__ == '__main__':
     if len(sys.argv) != 3:
         sys.exit('Usage: python register_browser_host.py EXTENSION_ID BROWSER_HOST_EXE')
     print(register(sys.argv[1], sys.argv[2]))
+

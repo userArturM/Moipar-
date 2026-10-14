@@ -22,6 +22,12 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate browser extension
         run: node tools/test_extension.mjs
+      - name: Real Chromium form tests
+        shell: pwsh
+        run: |
+          npm install --no-save playwright@1.62.1
+          npx playwright install chromium
+          node tools/test_browser_forms.cjs
       - name: Build desktop Windows Hello helper
         shell: pwsh
         run: ./tools/build_hello.ps1
@@ -38,6 +44,14 @@ jobs:
         run: python tools/verify_windows_build.py
       - name: Test packaged Native Messaging host
         run: python tools/test_packaged_host.py
+      - name: Download previous 4.1 installer for upgrade test
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: MoiParoli-Setup
+          run-id: 38591978269
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: previous_release
       - name: Test installer lifecycle
         run: python tools/test_installer.py
       - name: Upload browser integration

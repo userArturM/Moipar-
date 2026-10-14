@@ -12,3 +12,6 @@ backups/
 *.key
 *.keyfile
 test_temp/
+node_modules/
+package-lock.json
+previous_release/
