@@ -42,3 +42,4 @@ fillButton.addEventListener('click', async () => {
   } catch (err) { status.textContent = err.message || 'Ошибка заполнения'; }
   finally { fillButton.disabled = false; }
 });
+

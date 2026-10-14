@@ -8,13 +8,23 @@ from windows_hello import HelloUnlock, HelloUnavailable
 
 
 class HelloTests(unittest.TestCase):
+    def test_dpapi_roundtrip_on_windows(self):
+        import sys
+        if sys.platform != 'win32':
+            self.skipTest('Windows DPAPI required')
+        from windows_hello import _dpapi
+        secret = b'test-only-not-a-real-password'
+        encrypted = _dpapi(secret, True, b'unit-test-binding')
+        self.assertNotEqual(encrypted, secret)
+        self.assertEqual(_dpapi(encrypted, False, b'unit-test-binding'), secret)
+
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
         self.vault = os.path.join(self.dir.name, 'vault.dat')
         self.hello_file = os.path.join(self.dir.name, 'hello.json')
         with open(self.vault, 'w') as f:
-            json.dump({'magic': 'passvault-v2', 'version': 2,
+            json.dump({'magic': 'passvault', 'version': 2,
                        'kdf': {'salt': 'abc', 'n': 65536, 'r': 8, 'p': 1}}, f)
         self.hello = HelloUnlock(self.vault, self.hello_file)
 
@@ -58,3 +68,4 @@ class HelloTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

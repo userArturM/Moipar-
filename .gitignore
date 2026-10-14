@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+installer_out/
+*.spec
+*.obj
+vault.dat*
+hello_credential.json
+settings.json
+backups/
+*.key
+*.keyfile
+test_temp/

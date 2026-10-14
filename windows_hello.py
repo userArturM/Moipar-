@@ -12,6 +12,8 @@ import json
 import os
 import sys
 import tempfile
+import subprocess
+from pathlib import Path
 
 
 class HelloUnavailable(RuntimeError):
@@ -23,9 +25,11 @@ def _require_windows():
         raise HelloUnavailable('Windows Hello доступен только в Windows 10/11')
 
 
+class DATA_BLOB(ctypes.Structure):
+    _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_byte))]
+
+
 def _data_blob(raw):
-    class DATA_BLOB(ctypes.Structure):
-        _fields_ = [('cbData', wintypes.DWORD), ('pbData', ctypes.POINTER(ctypes.c_byte))]
     buffer = ctypes.create_string_buffer(raw, max(len(raw), 1))
     return DATA_BLOB(len(raw), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_byte))), buffer, DATA_BLOB
 
@@ -36,7 +40,7 @@ def _dpapi(raw, encrypt, entropy):
     inp, inp_buf, Blob = _data_blob(raw)
     ent, ent_buf, _ = _data_blob(entropy)
     output = Blob()
-    crypt = ctypes.windll.crypt32
+    crypt = ctypes.WinDLL('crypt32', use_last_error=True)
     fun = crypt.CryptProtectData if encrypt else crypt.CryptUnprotectData
     if encrypt:
         fun.argtypes = [ctypes.POINTER(Blob), wintypes.LPCWSTR, ctypes.POINTER(Blob),
@@ -52,14 +56,17 @@ def _dpapi(raw, encrypt, entropy):
     try:
         return ctypes.string_at(output.pbData, output.cbData)
     finally:
-        ctypes.windll.kernel32.LocalFree(output.pbData)
+        free = ctypes.windll.kernel32.LocalFree
+        free.argtypes = [ctypes.c_void_p]
+        free.restype = ctypes.c_void_p
+        free(output.pbData)
 
 
 def _vault_binding(vault_path):
     # Ties a cached password to *this vault*, but allows normal entry updates.
     with open(vault_path, encoding='utf-8') as handle:
         data = json.load(handle)
-    if data.get('magic') != 'passvault-v2' or data.get('version') != 2:
+    if data.get('magic') != 'passvault' or data.get('version') != 2:
         raise HelloUnavailable('Быстрый вход поддерживает только vault.dat v2')
     kdf = data['kdf']
     fingerprint = json.dumps([os.path.abspath(vault_path), kdf['salt'], kdf['n'],
@@ -108,17 +115,27 @@ class HelloUnlock:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    async def verify(self):
+    async def verify(self, hwnd=None):
         _require_windows()
+        if not hwnd:
+            raise HelloUnavailable('Для Windows Hello требуется окно приложения')
+        root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+        helper = root / 'hello_verify.exe'
+        if not helper.is_file():
+            raise HelloUnavailable('Компонент Windows Hello не собран. Используйте мастер-пароль.')
         try:
-            from winrt.windows.security.credentials.ui import UserConsentVerifier, UserConsentVerifierAvailability, UserConsentVerificationResult
-        except ImportError as exc:
-            raise HelloUnavailable('Не установлен WinRT (pip install winrt-Windows.Security.Credentials.UI)') from exc
-        status = await UserConsentVerifier.check_availability_async()
-        if status != UserConsentVerifierAvailability.AVAILABLE:
+            result = await asyncio.to_thread(subprocess.run, [str(helper), str(int(hwnd))],
+                                             creationflags=subprocess.CREATE_NO_WINDOW,
+                                             check=False, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise HelloUnavailable('Проверка Hello недоступна или истекло время ожидания') from exc
+        if result.returncode == 0:
+            return True
+        if result.returncode == 1:
+            return False
+        if result.returncode == 2:
             raise HelloUnavailable('Windows Hello не настроен или недоступен')
-        result = await UserConsentVerifier.request_verification_async('Разблокировать «Мои пароли»')
-        return result == UserConsentVerificationResult.VERIFIED
+        raise HelloUnavailable('Не удалось выполнить проверку Windows Hello. Используйте мастер-пароль.')
 
     def retrieve_after_verification(self):
         from base64 import b64decode
@@ -128,3 +145,4 @@ class HelloUnlock:
         if payload.get('vault') != fingerprint or payload.get('version') != 1:
             raise HelloUnavailable('Хранилище или мастер-ключ изменены. Повторно включите Windows Hello.')
         return _dpapi(b64decode(payload['encrypted'], validate=True), False, fingerprint.encode()).decode('utf-8')
+

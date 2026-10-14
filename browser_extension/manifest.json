@@ -6,3 +6,4 @@
   "permissions": ["activeTab", "nativeMessaging", "scripting"],
   "action": {"default_popup": "popup.html", "default_title": "Мои пароли"}
 }
+

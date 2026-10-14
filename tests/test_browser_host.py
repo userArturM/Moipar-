@@ -50,3 +50,4 @@ class AdditionalBrowserTests(unittest.TestCase):
         from browser_host import verified_origin
         with self.assertRaises(ValueError):
             verified_origin('https://name:secret@example.com/')
+

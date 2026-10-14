@@ -69,7 +69,7 @@ def select_record(host):
     # Imported lazily so native protocol tests do not require a display.
     import tkinter as tk
     from tkinter import ttk, messagebox
-    from moi_paroli import Vault, Settings, data_dir, KeyfileRequired
+    from moi_paroli import Vault, Settings, data_dir, VaultError
 
     root = tk.Tk()
     root.title('Мои пароли — разрешить заполнение')
@@ -131,7 +131,7 @@ def select_record(host):
                 if entry is not None:
                     result = {'ok': True, 'login': entry.get('login', ''), 'password': entry['password']}
             vault.lock()
-        except (OSError, ValueError, KeyfileRequired) as exc:
+        except (OSError, ValueError, VaultError) as exc:
             result = {'ok': False, 'error': 'Не удалось открыть хранилище: ' + type(exc).__name__}
         finally:
             vault.lock()
@@ -165,3 +165,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

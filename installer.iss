@@ -1,6 +1,6 @@
 ﻿#define MyAppName "Мои пароли"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.0"
+#define MyAppVersion "4.1"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}
@@ -36,9 +36,7 @@ Name: "desktopicon"; Description: "Создать ярлык на рабочем
 [Files]
 Source: "dist\MoiParoli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\browser_host.exe"; DestDir: "{app}"; Flags: ignoreversion
-#if DirExists("browser_extension")
 Source: "browser_extension\*"; DestDir: "{app}\browser_extension"; Flags: ignoreversion recursesubdirs createallsubdirs
-#endif
 Source: "register_browser_host.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -47,3 +45,4 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 
 [Run]
 Filename: "{app}\{#MyAppExe}"; Description: "Запустить «{#MyAppName}»"; Flags: nowait postinstall skipifsilent
+

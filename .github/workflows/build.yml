@@ -17,26 +17,37 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install cryptography pyinstaller pystray pillow openpyxl winrt-Windows.Security.Credentials.UI
+          pip install cryptography pyinstaller pystray pillow openpyxl
       - name: Regression tests
         run: python -m unittest discover -s tests -v
+      - name: Validate browser extension
+        run: node tools/test_extension.mjs
+      - name: Build desktop Windows Hello helper
+        shell: pwsh
+        run: ./tools/build_hello.ps1
       - name: Portable EXE
-        run: pyinstaller --onefile --noconsole --name MoiParoli --icon icon.ico --collect-submodules pystray --hidden-import pystray._win32 --collect-submodules winrt moi_paroli.py
+        run: pyinstaller --onefile --noconsole --name MoiParoli --icon icon.ico --collect-submodules pystray --hidden-import pystray._win32 --add-binary "dist/hello_verify.exe;." moi_paroli.py
       - name: Browser host
-        run: pyinstaller --onefile --noconsole --name browser_host browser_host.py
+        run: pyinstaller --onefile --console --name browser_host browser_host.py
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
-      - name: Check optional browser extension
-        shell: pwsh
-        run: |
-          if (-not (Test-Path -LiteralPath browser_extension -PathType Container)) {
-            Write-Output "::warning::browser_extension is absent. The desktop installer will be built without browser autofill."
-          }
       - name: Installer EXE
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - name: Verify built executables
         run: python tools/verify_windows_build.py
+      - name: Test packaged Native Messaging host
+        run: python tools/test_packaged_host.py
+      - name: Upload browser integration
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoiParoli-BrowserHost
+          path: |
+            dist/browser_host.exe
+            browser_extension/**
+            register_browser_host.ps1
+            register_browser_host.py
+          if-no-files-found: error
       - name: Upload checksums
         uses: actions/upload-artifact@v4
         with:
@@ -55,3 +66,4 @@ jobs:
           name: MoiParoli-Setup
           path: installer_out/MoiParoli-Setup.exe
           if-no-files-found: error
+

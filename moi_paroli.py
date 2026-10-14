@@ -52,7 +52,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.0"
+APP_VERSION = "4.1"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 10
@@ -572,11 +572,17 @@ class Vault:
     @classmethod
     def validate_backup(cls, path, password, keyfile=None):
         """Полная проверка AEAD без изменения рабочего файла или данных пользователя."""
-        probe = cls(path)
-        probe.unlock(password, keyfile)
-        count = len(probe.entries)
-        probe.lock()
-        return count
+        import tempfile
+        # Unlock may migrate legacy files or purge old trash; only touch a copy.
+        with tempfile.TemporaryDirectory() as folder:
+            copy = os.path.join(folder, "probe.dat")
+            shutil.copyfile(path, copy)
+            probe = cls(copy)
+            try:
+                probe.unlock(password, keyfile)
+                return len(probe.entries)
+            finally:
+                probe.lock()
 
     def _daily_backup(self):
         try:
@@ -1395,7 +1401,7 @@ class GeneratorDialog:
     def __init__(self, app, parent, select=False):
         self.app, self.result = app, None
         top = self.top = _new_top(app, parent, "Генератор паролей")
-        frm = ttk.Frame(top, padding=16)
+        frm = ttk.Frame(top, padding=24)
         frm.pack()
         self.out = tk.StringVar()
         ttk.Entry(frm, textvariable=self.out, width=44, font=("Consolas", 11)).grid(
@@ -1419,7 +1425,6 @@ class GeneratorDialog:
             ttk.Checkbutton(frm, text=text, variable=var, command=self.regen).grid(
                 row=3 + i, column=0, columnspan=3, sticky="w")
 
-        hello_button.grid(row=row + 2, column=0, columnspan=2, sticky="ew", pady=(12, 6))
         btns = ttk.Frame(frm)
         btns.grid(row=9, column=0, columnspan=3, sticky="e", pady=(14, 0))
         ttk.Button(btns, text="Обновить", command=self.regen).pack(side="left", padx=4)
@@ -1720,6 +1725,7 @@ class SettingsDialog:
         ttk.Entry(frm, textvariable=self.repo, width=24).grid(row=row, column=1, sticky="w", padx=12, pady=(10, 0))
         ttk.Label(frm, text="например: ivan/moi-paroli", foreground=app.t["muted"], font=(FF, 8)).grid(
             row=row + 1, column=1, sticky="w", padx=12)
+        hello_button.grid(row=row + 2, column=0, columnspan=2, sticky="ew", pady=(12, 6))
         btns = ttk.Frame(frm)
         btns.grid(row=row + 3, column=0, columnspan=2, sticky="e", pady=(14, 0))
         ttk.Button(btns, text="Сохранить", style="Accent.TButton", command=self.save).pack(side="left", padx=4)
@@ -2793,10 +2799,14 @@ class App:
     def hello_login(self, err_label):
         """Verify OS user presence off the Tk event loop; never send password to browser."""
         import asyncio
+        hwnd = self.root.winfo_id()
+        if sys.platform == "win32":
+            import ctypes
+            hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
         err_label.config(text="Ожидание подтверждения Windows Hello…", foreground=self.t["muted"])
         def work():
             try:
-                if not asyncio.run(self.hello.verify()):
+                if not asyncio.run(self.hello.verify(hwnd)):
                     self._q.put(lambda: err_label.config(text="Подтверждение Windows Hello отменено"))
                     return
                 password = self.hello.retrieve_after_verification()
@@ -2836,10 +2846,14 @@ class App:
         if not self.vault.verify_password(password):
             messagebox.showerror("Windows Hello", "Неверный мастер-пароль.", parent=self.root)
             return
+        hwnd = self.root.winfo_id()
+        if sys.platform == "win32":
+            import ctypes
+            hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
         def work():
             import asyncio
             try:
-                if not asyncio.run(self.hello.verify()):
+                if not asyncio.run(self.hello.verify(hwnd)):
                     self._q.put(lambda: messagebox.showwarning("Windows Hello", "Проверка не пройдена."))
                     return
                 self.hello.enroll(password)
@@ -3580,6 +3594,22 @@ class App:
         except (OSError, ValueError) as ex:
             messagebox.showerror(APP_NAME, f"Файл не подходит:\n{ex}", parent=self.root)
             return
+        backup_password = simpledialog.askstring(APP_NAME, "Мастер-пароль резервной копии:",
+                                                   show="•", parent=self.root)
+        if backup_password is None:
+            return
+        try:
+            keydata = None
+            if Vault.header_needs_keyfile(path):
+                keypath = filedialog.askopenfilename(parent=self.root, title="Ключевой файл резервной копии")
+                if not keypath:
+                    return
+                with open(keypath, "rb") as key:
+                    keydata = key.read()
+            Vault.validate_backup(path, backup_password, keydata)
+        except (VaultError, OSError, ValueError) as ex:
+            messagebox.showerror(APP_NAME, f"Копия не прошла проверку: {ex}", parent=self.root)
+            return
         if not messagebox.askyesno(
                 APP_NAME, "Текущие данные будут заменены выбранной копией.\n"
                           "Прежний файл сохранится как vault.dat.before-restore.\n\nПродолжить?",
@@ -3587,7 +3617,9 @@ class App:
             return
         try:
             shutil.copyfile(self.vault.path, self.vault.path + ".before-restore")
-            shutil.copyfile(path, self.vault.path)
+            staged = self.vault.path + ".restore.tmp"
+            shutil.copyfile(path, staged)
+            os.replace(staged, self.vault.path)
         except OSError as ex:
             messagebox.showerror(APP_NAME, f"Не удалось восстановить:\n{ex}", parent=self.root)
             return

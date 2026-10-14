@@ -5,7 +5,8 @@ import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = [ROOT / "dist/MoiParoli.exe", ROOT / "dist/browser_host.exe", ROOT / "installer_out/MoiParoli-Setup.exe"]
+FILES = [ROOT / "dist/MoiParoli.exe", ROOT / "dist/browser_host.exe",
+         ROOT / "dist/hello_verify.exe", ROOT / "installer_out/MoiParoli-Setup.exe"]
 
 def is_pe(path):
     with Path(path).open("rb") as stream:
@@ -40,3 +41,4 @@ def verify():
 
 if __name__ == "__main__":
     print(json.dumps(verify(), indent=2))
+
