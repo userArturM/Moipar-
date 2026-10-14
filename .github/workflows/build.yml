@@ -68,6 +68,8 @@ jobs:
             browser_extension/**
             register_browser_host.ps1
             register_browser_host.py
+            browser_registration.py
+            browser_identity.py
           if-no-files-found: error
       - name: Upload checksums
         uses: actions/upload-artifact@v4
