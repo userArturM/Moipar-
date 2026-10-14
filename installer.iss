@@ -38,8 +38,6 @@ Source: "dist\MoiParoli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\browser_host.exe"; DestDir: "{app}"; Flags: ignoreversion
 #if DirExists("browser_extension")
 Source: "browser_extension\*"; DestDir: "{app}\browser_extension"; Flags: ignoreversion recursesubdirs createallsubdirs
-#else
-#warning Browser extension sources are absent; building the desktop installer without the extension.
 #endif
 Source: "register_browser_host.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
