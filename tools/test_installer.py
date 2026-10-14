@@ -24,10 +24,15 @@ with tempfile.TemporaryDirectory() as tmp:
         assert process.poll() is None, "Installed application exited during startup"
     finally:
         if process.poll() is None:
-            process.terminate()
+            # PyInstaller onefile uses a launcher and a child application process.
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                           check=True, capture_output=True, timeout=30)
         process.wait(timeout=30)
     subprocess.run([str(app / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES",
                     "/NORESTART"], check=True, timeout=120)
+    deadline = time.monotonic() + 30
+    while (app / "MoiParoli.exe").exists() and time.monotonic() < deadline:
+        time.sleep(0.25)
     assert not (app / "MoiParoli.exe").exists(), "Uninstall left the application EXE"
     assert sentinel.read_text(encoding="utf-8") == "user-data-must-survive"
 print("Installer smoke checks passed: install, application startup, uninstall, user data preserved")
