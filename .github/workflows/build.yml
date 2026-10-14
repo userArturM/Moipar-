@@ -29,6 +29,14 @@ jobs:
       - name: Installer EXE
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
+      - name: Verify built executables
+        run: python tools/verify_windows_build.py
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoiParoli-checksums
+          path: dist/BUILD_MANIFEST.json
+          if-no-files-found: error
       - name: Upload portable
         uses: actions/upload-artifact@v4
         with:
