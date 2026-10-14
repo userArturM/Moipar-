@@ -2136,7 +2136,7 @@ class App:
         self._sync_at = 0.0
         geo = str(self.settings.get("geometry") or "")
         self.root.geometry(geo if re.fullmatch(r"\d+x\d+(?:[+-]-?\d+){0,2}", geo) else "1360x820")
-        self.root.minsize(1240, 800)
+        self.root.minsize(1240, 720)
         self.icon = self.logo = None
         try:
             self.icon = tk.PhotoImage(data=ICON_B64)
@@ -2943,8 +2943,19 @@ class App:
         self.tree.bind("<Button-3>", self.context_menu)
         body.add(center, weight=3)
 
-        det = ttk.Frame(body, style="Panel.TFrame", padding=20, width=350)
-        self._build_details(det)
+        det = ttk.Frame(body, style="Panel.TFrame", width=350)
+        detail_canvas = tk.Canvas(det, bg=t["panel"], highlightthickness=0, width=350)
+        detail_scroll = ttk.Scrollbar(det, orient="vertical", command=detail_canvas.yview)
+        detail_scroll.pack(side="right", fill="y")
+        detail_canvas.pack(side="left", fill="both", expand=True)
+        detail_canvas.configure(yscrollcommand=detail_scroll.set)
+        detail_content = ttk.Frame(detail_canvas, style="Panel.TFrame", padding=20)
+        detail_window = detail_canvas.create_window((0, 0), window=detail_content, anchor="nw")
+        detail_canvas.bind("<Configure>", lambda event: detail_canvas.itemconfigure(
+            detail_window, width=event.width))
+        detail_content.bind("<Configure>", lambda event: detail_canvas.configure(
+            scrollregion=detail_canvas.bbox("all")))
+        self._build_details(detail_content)
         body.add(det, weight=1)
 
         self.ctx = self._menu()
