@@ -69,12 +69,16 @@ def select_record(host):
     # Imported lazily so native protocol tests do not require a display.
     import tkinter as tk
     from tkinter import ttk, messagebox
-    from moi_paroli import Vault, Settings, data_dir, VaultError
+    from moi_paroli import Vault, Settings, data_dir, VaultError, App
+    from types import SimpleNamespace
 
     root = tk.Tk()
     root.title('Мои пароли — разрешить заполнение')
     root.geometry('540x390')
     root.resizable(False, False)
+    settings = Settings(os.path.join(data_dir(), 'settings.json'))
+    appearance = SimpleNamespace(root=root, settings=settings)
+    App.apply_theme(appearance)
     result = {'ok': False, 'error': 'Отменено пользователем'}
     ttk.Label(root, text='Запрос пароля для сайта:', font=('Segoe UI', 11)).pack(pady=(16, 3))
     ttk.Label(root, text=host, font=('Segoe UI', 12, 'bold')).pack()
@@ -114,7 +118,11 @@ def select_record(host):
                     chooser.geometry('440x270')
                     chooser.grab_set()
                     ttk.Label(chooser, text='Выберите аккаунт для ' + host).pack(pady=12)
-                    choices = tk.Listbox(chooser, exportselection=False)
+                    chooser.configure(bg=appearance.t['bg'])
+                    choices = tk.Listbox(chooser, exportselection=False, relief='flat',
+                                         bg=appearance.t['card'], fg=appearance.t['fg'],
+                                         selectbackground=appearance.t['sel'],
+                                         selectforeground=appearance.t['fg'])
                     for index, candidate in enumerate(entries):
                         choices.insert(tk.END, str(index + 1) + '. ' + str(candidate.get('login') or candidate.get('title') or 'Без имени'))
                     choices.pack(fill='both', expand=True, padx=16)

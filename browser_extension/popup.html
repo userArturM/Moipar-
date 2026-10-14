@@ -1,2 +1,17 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>body{font:14px Segoe UI,Arial;background:#111d30;color:#eaf2ff;width:290px;padding:18px;margin:0}button{border:0;background:#3593f6;color:white;padding:11px;width:100%;border-radius:8px;cursor:pointer}p{color:#b4c2d7;line-height:1.4}#status{min-height:30px}</style></head><body><h3>Мои пароли Pro</h3><p>Введите мастер-пароль только в появившемся окне Windows. Адрес сайта должен совпадать с записью в хранилище.</p><button id="fill">Разрешить заполнение</button><p id="status" role="status"></p><script src="popup.js"></script></body></html>
-
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;--bg:#171a21;--text:#edf1f7;--muted:#a3adbc;--accent:#8aa7ff;--ink:#10172b}
+@media(prefers-color-scheme:light){:root{color-scheme:light;--bg:#fff;--text:#202b40;--muted:#5e6d85;--accent:#465dd8;--ink:#fff}}
+*{box-sizing:border-box}body{font:14px "Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);width:340px;padding:24px;margin:0}
+.brand{font-size:12px;font-weight:600;color:var(--accent);letter-spacing:1px}
+h1{font-size:23px;letter-spacing:-.5px;margin:16px 0 10px}p{color:var(--muted);line-height:1.6;margin:0 0 20px}
+button{border:0;background:var(--accent);color:var(--ink);padding:13px;width:100%;font:600 14px "Segoe UI",sans-serif;border-radius:9px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--text);outline-offset:3px}button:disabled{opacity:.6;cursor:wait}
+#status{min-height:40px;font-size:12px;margin:16px 0 0}
+</style></head><body>
+<div class="brand">◈ МОИ ПАРОЛИ</div><h1>Заполнить пароль</h1>
+<p>Подтвердите сайт и введите мастер-пароль в отдельном окне Windows. Форма останется открытой для проверки.</p>
+<button id="fill">Разрешить заполнение</button><p id="status" role="status" aria-live="polite"></p>
+<script src="popup.js"></script></body></html>

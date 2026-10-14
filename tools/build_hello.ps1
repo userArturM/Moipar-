@@ -4,5 +4,5 @@ $installation = & $vswhere -latest -products * -requires Microsoft.VisualStudio.
 if (-not $installation) { throw 'Visual C++ build tools not found' }
 $developer = Join-Path $installation 'Common7\Tools\VsDevCmd.bat'
 New-Item -ItemType Directory -Path dist -Force | Out-Null
-& cmd.exe /d /c "`"$developer`" -arch=x64 && cl /nologo /std:c++17 /EHsc /utf-8 native\hello_verify.cpp /Fe:dist\hello_verify.exe /link windowsapp.lib user32.lib"
+& cmd.exe /d /c "`"$developer`" -arch=x64 && cl /nologo /std:c++20 /EHsc /utf-8 native\hello_verify.cpp /Fe:dist\hello_verify.exe /link windowsapp.lib user32.lib"
 if ($LASTEXITCODE -ne 0) { throw 'Windows Hello helper compilation failed' }

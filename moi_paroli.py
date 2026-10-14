@@ -1386,6 +1386,18 @@ def _new_top(app, parent, title):
     top.configure(bg=app.t["bg"])
     top.transient(parent)
     top.resizable(False, False)
+    subtitles = {
+        "Генератор паролей": "Создайте уникальный пароль для новой учётной записи.",
+        "Новая запись": "Сохраните доступ и упорядочьте его в хранилище.",
+        "Запись": "Данные аккаунта и параметры доступа.",
+        "Настройки": "Безопасность, быстрый вход и поведение приложения.",
+        "Аудит безопасности": "Проверьте записи, которым требуется внимание.",
+    }
+    if title in subtitles:
+        header = ttk.Frame(top, padding=(24, 20, 24, 0))
+        header.pack(fill="x")
+        ttk.Label(header, text=title, font=(FF, 18, "bold")).pack(anchor="w")
+        ttk.Label(header, text=subtitles[title], style="BgMuted.TLabel").pack(anchor="w", pady=(5, 0))
     if app.icon:
         try:
             top.iconphoto(False, app.icon)
