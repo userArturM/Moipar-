@@ -2320,6 +2320,9 @@ class App:
         s.map("Vertical.TScrollbar", background=[("active", t["muted"])])
         s.configure("TPanedwindow", background=t["bg"])
         s.configure("TSeparator", background=t["border"])
+        s.configure("TNotebook", background=t["bg"], borderwidth=0)
+        s.configure("TNotebook.Tab", padding=(18, 9), background=t["card"], foreground=t["fg"])
+        s.map("TNotebook.Tab", background=[("selected",t["sel"]),("active",t["hover"])])
         for name, color in (("Bad", t["bad"]), ("Warn", t["warn"]), ("Good", t["good"])):
             s.configure(f"{name}.Horizontal.TProgressbar", background=color, troughcolor=t["border"],
                         lightcolor=color, darkcolor=color, bordercolor=t["border"], thickness=7)
@@ -2983,7 +2986,10 @@ class App:
         self.status_right = ttk.Label(bottom, text="", style="SideMuted.TLabel")
         self.status_right.pack(side="right")
 
-        body = ttk.PanedWindow(f, orient="horizontal")
+        self.root.update_idletasks()
+        scale = max(1.0, float(self.root.tk.call("tk", "scaling")) / (96/72))
+        compact = self.root.winfo_width() / scale < 1100
+        body = ttk.Notebook(f) if compact else ttk.PanedWindow(f, orient="horizontal")
         body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
 
         side_fr = ttk.Frame(body, style="Side.TFrame", width=240)
@@ -3005,7 +3011,10 @@ class App:
         nav_scroll.pack(side="right", fill="y")
         self.side.configure(yscrollcommand=nav_scroll.set)
         self.side.bind("<<TreeviewSelect>>", self.on_side_select)
-        body.add(side_fr, weight=0)
+        if compact:
+            body.add(side_fr, text="Разделы")
+        else:
+            body.add(side_fr, weight=0)
 
         center = ttk.Frame(body)
         toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
@@ -3047,7 +3056,11 @@ class App:
         self.tree.bind("<Control-c>", lambda e: self.copy_login())
         self.tree.bind("<Control-Shift-C>", lambda e: self.copy_password())
         self.tree.bind("<Button-3>", self.context_menu)
-        body.add(center, weight=3)
+        if compact:
+            body.add(center, text="Записи")
+            body.select(center)
+        else:
+            body.add(center, weight=3)
 
         det = ttk.Frame(body, style="Panel.TFrame", width=400)
         detail_canvas = tk.Canvas(det, bg=t["panel"], highlightthickness=0, width=400)
@@ -3062,7 +3075,10 @@ class App:
         detail_content.bind("<Configure>", lambda event: detail_canvas.configure(
             scrollregion=detail_canvas.bbox("all")))
         self._build_details(detail_content)
-        body.add(det, weight=1)
+        if compact:
+            body.add(det, text="Подробности")
+        else:
+            body.add(det, weight=1)
 
         self.ctx = self._menu()
         r = self.root

@@ -16,7 +16,7 @@ class RegistrationTests(unittest.TestCase):
             with patch.dict("sys.modules",{"winreg":registry}), patch.dict(os.environ,{"APPDATA":tmp}):
                 manifest=register("a"*32,str(exe))
             data=json.loads(Path(manifest).read_text(encoding="utf-8"))
-            self.assertEqual(data["path"],str(exe.resolve()))
+            self.assertTrue(os.path.samefile(data["path"],exe))
             self.assertEqual(data["allowed_origins"],["chrome-extension://"+"a"*32+"/"])
             self.assertIn(str(Path(tmp)/"MoiParoli"/"native"),manifest)
             keys=[call.args[1] for call in registry.CreateKey.call_args_list]
