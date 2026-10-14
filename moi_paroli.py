@@ -1397,14 +1397,49 @@ def _new_top(app, parent, title):
     return top
 
 
+def _scroll_dialog_body(top, padding=20):
+    """Keep larger fonts and keyboard-focused controls accessible on small screens."""
+    shell = ttk.Frame(top)
+    shell.pack(fill="both", expand=True)
+    canvas = tk.Canvas(shell, highlightthickness=0,
+                       bg=ttk.Style(top).lookup("TFrame", "background"))
+    vertical = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+    horizontal = ttk.Scrollbar(shell, orient="horizontal", command=canvas.xview)
+    horizontal.pack(side="bottom", fill="x")
+    vertical.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+    canvas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+    frame = ttk.Frame(canvas, padding=padding)
+    canvas.create_window((0,0), window=frame, anchor="nw")
+    frame.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+    def fit():
+        top.update_idletasks()
+        header_height=sum(w.winfo_reqheight() for w in top.winfo_children() if w is not shell)
+        width=min(frame.winfo_reqwidth()+24,top.winfo_screenwidth()-80)
+        height=min(frame.winfo_reqheight()+header_height+24,top.winfo_screenheight()-100)
+        canvas.configure(width=max(320,width-24),height=max(200,height-header_height-24))
+    def reveal(event):
+        widget=event.widget
+        if not str(widget).startswith(str(frame)+"."):
+            return
+        y=widget.winfo_rooty()-frame.winfo_rooty()
+        height=max(1,frame.winfo_height())
+        view_start=float(canvas.yview()[0])*height
+        if y<view_start or y+widget.winfo_height()>view_start+canvas.winfo_height():
+            canvas.yview_moveto(max(0,(y-12)/height))
+    top.resizable(True,True)
+    top.bind("<FocusIn>",reveal,add="+")
+    top.after_idle(fit)
+    return frame
+
+
 class ConflictDialog:
     def __init__(self, app, snapshot):
         self.result = None
         self.choices = {}
         conflicts = snapshot["conflicts"]
         top = _new_top(app, app.root, "Разрешить конфликты")
-        frame = ttk.Frame(top, padding=24)
-        frame.pack(fill="both", expand=True)
+        frame = _scroll_dialog_body(top,24)
         ttk.Label(frame, text="Выберите версию записи", font=(FF, 18, "bold")).pack(anchor="w")
         ttk.Label(frame, text="Пароли скрыты. Сохранение обеих версий создаёт отдельную запись.",
                   wraplength=560, foreground=app.t["muted"]).pack(anchor="w", pady=(5, 18))
