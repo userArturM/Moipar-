@@ -3,6 +3,7 @@ const bindWorker=require('./browser_test_bridge.cjs');
 function fixture(native){
  const calls=[];
  const chrome={runtime:{sendNativeMessage:async(host,message)=>{calls.push(structuredClone(message));return native(message)}},
+  action:{setBadgeText:options=>calls.push({action:'badge',...options}),setTitle:options=>calls.push({action:'title',...options})},
   tabs:{get:async id=>({id,url:'https://example.test/login',active:true})},
   scripting:{executeScript:async request=>{calls.push({action:'injected',args:[...request.args]});return [{result:true}]}}};
  return {chrome,calls,...bindWorker(chrome)};
@@ -25,6 +26,15 @@ function fixture(native){
  const spoof=fixture(()=>{throw Error('must not contact native host')});
  assert.equal((await spoof.dispatch(message,{id:'untrusted',url:'https://example.test',tab:{id:1}})).ok,false);
  assert.equal(spoof.calls.length,0);
+ const disconnected=fixture(()=>{throw Error('Native host disconnected')});
+ assert.equal((await disconnected.dispatch({...message})).ok,false);
+ assert(disconnected.calls.some(c=>c.action==='badge'&&c.text==='!'));
+ const absent=fixture(()=>({ok:true,login:'synthetic',password:'SyntheticOnly!789'}));
+ absent.chrome.scripting.executeScript=async()=>[{result:false}];
+ const notFilled=await absent.dispatch({...message});
+ assert.equal(notFilled.ok,false);
+ assert.equal(notFilled.error,'Форма пароля не найдена.');
+ assert(absent.calls.some(c=>c.action==='badge'&&c.text==='!'));
  let navigate;
  const slow=fixture(()=>new Promise(resolve=>navigate=resolve));
  const delayed=slow.dispatch(message);

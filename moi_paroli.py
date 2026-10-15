@@ -54,7 +54,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.5.3"
+APP_VERSION = "4.5.4"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4

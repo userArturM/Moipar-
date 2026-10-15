@@ -2,6 +2,14 @@ importScripts('fill.js');
 const recent=new Map();
 const remembered=new Map();
 const pending=new Map();
+function trustedPopup(sender){
+  return sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('popup.html');
+}
+function manualStatus(message,sender,ok){
+  if(!trustedPopup(sender)||!Number.isInteger(message.tabId))return;
+  chrome.action.setBadgeText({tabId:message.tabId,text:ok?'✓':'!'});
+  chrome.action.setTitle({tabId:message.tabId,title:ok?'Действие выполнено':'Действие отменено или недоступно'});
+}
 function nativeRequest(message){
   return new Promise((resolve,reject)=>{
     const port=chrome.runtime.connectNative('ru.moiparoli.host');
@@ -12,7 +20,7 @@ function nativeRequest(message){
   });
 }
 async function manualRequest(message,sender){
-  if(sender.id!==chrome.runtime.id||sender.url!==chrome.runtime.getURL('popup.html'))
+  if(!trustedPopup(sender))
     throw Error('Запрос разрешён только из окна расширения');
   if(message.action==='native_ping')return nativeRequest({action:'ping'});
   if(!Number.isInteger(message.tabId)||typeof message.url!=='string')throw Error('Неверная вкладка');
@@ -35,7 +43,8 @@ async function manualRequest(message,sender){
     if(!latest.active||latest.url!==message.url)throw Error('Вкладка изменилась — запрос отменён.');
     const filled=await chrome.scripting.executeScript({target:{tabId:tab.id},func:MoiParoliFill,
       args:[reply.login,reply.password,url.origin]});
-    return {ok:true,message:filled?.[0]?.result?'Поля заполнены. Проверьте сайт перед входом.':'Форма пароля не найдена.'};
+    return filled?.[0]?.result?{ok:true,message:'Поля заполнены. Проверьте сайт перед входом.'}:
+      {ok:false,error:'Форма пароля не найдена.'};
   }finally{
     if(reply&&'password' in reply)reply.password='';
     if(message.credentials)message.credentials.password='';
@@ -45,12 +54,12 @@ async function manualRequest(message,sender){
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   if(['manual_fill','manual_save','native_ping'].includes(message?.action)){
     manualRequest(message,sender).then(reply=>{
-      if(Number.isInteger(message.tabId)){
-        chrome.action.setBadgeText({tabId:message.tabId,text:reply.ok?'✓':'!'});
-        chrome.action.setTitle({tabId:message.tabId,title:reply.ok?'Действие выполнено':'Действие отменено или недоступно'});
-      }
+      manualStatus(message,sender,reply.ok);
       sendResponse(reply);
-    }).catch(error=>sendResponse({ok:false,error:error.message}));
+    }).catch(error=>{
+      manualStatus(message,sender,false);
+      sendResponse({ok:false,error:error.message});
+    });
     return true;
   }
   if(!['offer_save','remember_login'].includes(message?.action))return;
