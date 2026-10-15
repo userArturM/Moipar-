@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   windows:
@@ -31,18 +31,33 @@ jobs:
           npm install --no-save playwright@1.62.1
           npx playwright install chromium
           node tools/test_browser_forms.cjs
+          node tools/test_browser_advanced.cjs
       - name: Build desktop Windows Hello helper
         shell: pwsh
         run: ./tools/build_hello.ps1
+      - name: Validate native Hello helper
+        run: python tools/test_hello_helper.py
       - name: Portable EXE
         run: pyinstaller --onefile --noconsole --name MoiParoli --icon icon.ico --add-data "icon.ico;." --add-data "translations.json;." --collect-submodules pystray --hidden-import pystray._win32 --add-binary "dist/hello_verify.exe;." moi_paroli.py
       - name: Browser host
         run: pyinstaller --onefile --console --name browser_host --add-data "translations.json;." browser_host.py
+      - name: Sign application binaries when a publisher certificate is configured
+        shell: pwsh
+        env:
+          MOIPAROLI_SIGNING_PFX_BASE64: ${{ secrets.MOIPAROLI_SIGNING_PFX_BASE64 }}
+          MOIPAROLI_SIGNING_PASSWORD: ${{ secrets.MOIPAROLI_SIGNING_PASSWORD }}
+        run: ./tools/sign_windows.ps1 -Phase app
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Installer EXE
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
+      - name: Sign installer when a publisher certificate is configured
+        shell: pwsh
+        env:
+          MOIPAROLI_SIGNING_PFX_BASE64: ${{ secrets.MOIPAROLI_SIGNING_PFX_BASE64 }}
+          MOIPAROLI_SIGNING_PASSWORD: ${{ secrets.MOIPAROLI_SIGNING_PASSWORD }}
+        run: ./tools/sign_windows.ps1 -Phase installer
       - name: Verify built executables
         run: python tools/verify_windows_build.py
       - name: Test packaged Native Messaging host
@@ -90,3 +105,23 @@ jobs:
           path: installer_out/MoiParoli-Setup.exe
           if-no-files-found: error
 
+
+      - name: Publish tested release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Compress-Archive -Path portable/* -DestinationPath MoiParoli-portable.zip
+          $version = python -c "import moi_paroli; print(moi_paroli.APP_VERSION)"
+          $tag = "v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip dist/BUILD_MANIFEST.json --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed' }
+          } else {
+            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Мои пароли $version" --notes-file RELEASE_NOTES.md
+            if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          }
+
+      - name: Verify public update and installer download
+        run: python tools/test_public_update.py

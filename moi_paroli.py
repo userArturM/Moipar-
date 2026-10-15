@@ -39,6 +39,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs
 
 from localization import tr
+import feature_dialogs
 from windows_hello import HelloUnlock, HelloUnavailable
 from cryptography.exceptions import InvalidTag
 from cryptography.fernet import Fernet, InvalidToken
@@ -53,7 +54,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.4"
+APP_VERSION = "4.5"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -523,6 +524,16 @@ class Vault:
                         if not (e["id"] in tomb and stamp(e) <= tomb[e["id"]])]
         cats = list(r_meta.get("categories") or []) + list(self.meta.get("categories") or [])
         self.meta["categories"] = list(dict.fromkeys(cats))
+        props=self.meta.setdefault("category_properties",{})
+        for name,data in (r_meta.get("category_properties") or {}).items():
+            if isinstance(data,dict) and data.get("mtime","")>props.get(name,{}).get("mtime",""):props[name]=data
+        retired=self.meta.setdefault("category_tombstones",{})
+        for name,stamp_value in (r_meta.get("category_tombstones") or {}).items():
+            if stamp_value>retired.get(name,""):retired[name]=stamp_value
+        def removed(name):return name in retired and props.get(name,{}).get("mtime","")<=retired[name]
+        self.meta["categories"]=[name for name in self.meta["categories"] if not removed(name)]
+        for entry in self.entries:
+            if removed(entry["category"]):entry["category"]=""
         self.meta["tombstones"] = tomb
 
     def conflict_snapshot(self):
@@ -582,16 +593,16 @@ class Vault:
         r_entries, r_meta = self._read_remote()
         remote_fp = self._fp(r_entries, r_meta.get("tombstones") or {})
         before = self._fp(self.entries, self.meta.get("tombstones") or {})
+        before_meta=json.dumps(self.meta,sort_keys=True)
         self._assert_no_conflicts(r_entries)
         self._merge(r_entries, r_meta)
         after = self._fp(self.entries, self.meta.get("tombstones") or {})
         self._sig = sig
         self._remember_base()
-        if after != before:
-            self.merged = True
-        if write and after != remote_fp:
-            self.save(check_external=False)
-        return after != before
+        changed=after!=before or json.dumps(self.meta,sort_keys=True)!=before_meta
+        if changed:self.merged=True
+        if write and (after!=remote_fp or self.meta!=r_meta):self.save(check_external=False)
+        return changed
 
     # --- запись на диск (автосохранение)
     def save(self, check_external=True):
@@ -673,6 +684,8 @@ class Vault:
         previous_entries,previous_meta=copy.deepcopy(self.entries),copy.deepcopy(self.meta)
         try:
             self.meta["categories"]=[c for c in self.meta.get("categories",[]) if c!=name]
+            self.meta.get("category_properties",{}).pop(name,None)
+            self.meta.setdefault("category_tombstones",{})[name]=datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
             for entry in self.entries:
                 if entry["category"]==name:
                     entry["category"]=""
@@ -685,6 +698,7 @@ class Vault:
     def _register_category(self, cat):
         if cat and cat not in self.meta["categories"]:
             self.meta["categories"].append(cat)
+            self.meta.setdefault("category_properties",{}).setdefault(cat,{})["mtime"]=datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
     @staticmethod
     def _touch(e):
@@ -863,7 +877,7 @@ class Settings:
                 "lock_on_minimize": True, "geometry": "", "lock_on_session_lock": True,
                 "close_to_tray": True, "hotkey_enabled": True, "hotkey": "Ctrl+Alt+P",
                 "protect_capture": False, "autotype_enter": False, "check_updates": False,
-                "language": "ru", "animations": True, "update_repo": "userArturM/Moipar-", "vault_path": "", "keyfile_path": ""}
+                "font_size": 10, "sidebar_collapsed": False, "external_backup_dir": "", "backup_reminders": True, "backup_reminded": "", "language": "ru", "animations": True, "update_repo": "userArturM/Moipar-", "vault_path": "", "keyfile_path": ""}
 
     def __init__(self, path):
         self.path = path
@@ -1865,7 +1879,8 @@ class SettingsDialog:
              ("protect_capture", tr('Скрывать окно от скриншотов и записи экрана')),
              ("autotype_enter", tr('После автоввода нажимать Enter')),
              ("check_updates", tr('Проверять обновления при запуске')),
-             ("animations", tr('Анимация входа')))
+             ("animations", tr('Анимация входа')),
+             ("backup_reminders",tr("Напоминать об отдельной резервной копии")))
 
     def __init__(self, app, parent):
         s = app.settings
@@ -1878,6 +1893,7 @@ class SettingsDialog:
         self.repo = tk.StringVar(value=s.get("update_repo") or "userArturM/Moipar-")
         self.language=tk.StringVar(value="English" if s.get("language")=="en" else tr('Русский'))
         self.token=tk.StringVar()
+        self.font_size=tk.IntVar(value=s.get("font_size"))
         self.flags = {k: tk.BooleanVar(value=bool(s.get(k))) for k, _ in self.FLAGS}
         hello_button = ttk.Button(frm, text=tr('Windows Hello: включить / отключить'),
                                   command=self._configure_hello)
@@ -1905,7 +1921,9 @@ class SettingsDialog:
         ttk.Entry(frm,textvariable=self.token,show="•",width=24).grid(row=row+4,column=1)
         ttk.Label(frm,text=tr('Пустое поле сохраняет прежний токен. Защищён Windows DPAPI.'),wraplength=440).grid(row=row+5,column=0,columnspan=2,sticky="w")
         ttk.Button(frm,text=tr('Удалить токен'),command=self.clear_token).grid(row=row+6,column=0,sticky="w",pady=8)
-        btns.grid(row=row + 7, column=0, columnspan=2, sticky="e", pady=(14, 0))
+        ttk.Label(frm,text=tr("Размер текста")).grid(row=row+7,column=0,sticky="w",pady=8)
+        ttk.Spinbox(frm,from_=9,to=14,textvariable=self.font_size,width=6).grid(row=row+7,column=1,sticky="w")
+        btns.grid(row=row + 8, column=0, columnspan=2, sticky="e", pady=(14, 0))
         ttk.Button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self.save).pack(side="left", padx=4)
         ttk.Button(btns, text=tr('Отмена'), command=top.destroy).pack(side="left")
         top.grab_set()
@@ -1948,6 +1966,9 @@ class SettingsDialog:
             except (OSError,ValueError) as exc:
                 messagebox.showerror(tr(APP_NAME),tr('Не удалось сохранить токен GitHub.'),parent=self.top)
                 return
+        try:font_size=max(9,min(14,int(self.font_size.get())))
+        except (ValueError,tk.TclError):return
+        s.set("font_size",font_size)
         s.set("idle_minutes", idle)
         s.set("clipboard_seconds", clip)
         s.set("hotkey", hk)
@@ -2370,6 +2391,8 @@ class App:
 
     # ---------------- тема
     def apply_theme(self):
+        font_size=max(9,min(14,int(self.settings.get("font_size") or 10)))
+        def scaled_font(size):return max(8,round(size*font_size/10))
         name = self.settings.get("theme")
         self.theme_name = name if name in THEMES else "dark"
         t = self.t = THEMES[self.theme_name]
@@ -2388,26 +2411,26 @@ class App:
 
         s.configure(".", background=t["bg"], foreground=t["fg"], fieldbackground=t["card"],
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
-                    troughcolor=t["border"], focuscolor=t["accent"], font=(FF, 10))
+                    troughcolor=t["border"], focuscolor=t["accent"], font=(FF, scaled_font(10)))
         s.configure("TFrame", background=t["bg"])
-        s.configure("Section.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, 13, "bold"))
-        s.configure("DetailCaption.TLabel", background=t["panel"], foreground=t["muted"], font=(FF, 10))
+        s.configure("Section.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, scaled_font(13), "bold"))
+        s.configure("DetailCaption.TLabel", background=t["panel"], foreground=t["muted"], font=(FF, scaled_font(10)))
         s.configure("Compact.TButton", padding=(10, 5))
-        s.configure("Search.TEntry", padding=(12, 10), font=(FF, 11))
+        s.configure("Search.TEntry", padding=(12, 10), font=(FF, scaled_font(11)))
         s.configure("TLabel", background=t["bg"], foreground=t["fg"])
         for nm, col in (("Side", t["side"]), ("Panel", t["panel"]), ("Card", t["card"])):
             s.configure(f"{nm}.TFrame", background=col)
             s.configure(f"{nm}.TLabel", background=col, foreground=t["fg"])
-        s.configure("BgMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, 9))
-        s.configure("Muted.TLabel", background=t["panel"], foreground=t["muted"], font=(FF, 9))
-        s.configure("CardMuted.TLabel", background=t["card"], foreground=t["muted"], font=(FF, 9))
-        s.configure("SideMuted.TLabel", background=t["side"], foreground=t["muted"], font=(FF, 9))
-        s.configure("Title.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, 16, "bold"))
-        s.configure("Big.TLabel", background=t["card"], foreground=t["fg"], font=(FF, 24, "bold"))
-        s.configure("Brand.TLabel", background=t["side"], foreground=t["fg"], font=(FF, 15, "bold"))
-        s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, 22, "bold"))
-        s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, 10))
-        s.configure("SideHeading.TLabel", background=t["side"], foreground=t["muted"], font=(FF, 9, "bold"))
+        s.configure("BgMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, scaled_font(9)))
+        s.configure("Muted.TLabel", background=t["panel"], foreground=t["muted"], font=(FF, scaled_font(9)))
+        s.configure("CardMuted.TLabel", background=t["card"], foreground=t["muted"], font=(FF, scaled_font(9)))
+        s.configure("SideMuted.TLabel", background=t["side"], foreground=t["muted"], font=(FF, scaled_font(9)))
+        s.configure("Title.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, scaled_font(16), "bold"))
+        s.configure("Big.TLabel", background=t["card"], foreground=t["fg"], font=(FF, scaled_font(24), "bold"))
+        s.configure("Brand.TLabel", background=t["side"], foreground=t["fg"], font=(FF, scaled_font(15), "bold"))
+        s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, scaled_font(22), "bold"))
+        s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, scaled_font(10)))
+        s.configure("SideHeading.TLabel", background=t["side"], foreground=t["muted"], font=(FF, scaled_font(9), "bold"))
         s.configure("Mono.TLabel", background=t["panel"], foreground=t["fg"], font=(MONO, 11))
         s.configure("StatValue.TLabel",background=t["panel"],foreground=t["fg"],font=(FF,22,"bold"))
         s.configure("StatCaption.TLabel",background=t["panel"],foreground=t["muted"],font=(FF,9))
@@ -2429,13 +2452,13 @@ class App:
 
         s.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
         s.configure("Treeview", background=t["panel"], fieldbackground=t["panel"],
-                    foreground=t["fg"], rowheight=48, borderwidth=0, relief="flat")
+                    foreground=t["fg"], rowheight=scaled_font(48), borderwidth=0, relief="flat")
         s.map("Treeview", background=[("selected", t["sel"])], foreground=[("selected", t["fg"])])
         s.configure("Treeview.Heading", background=t["side"], foreground=t["muted"],
-                    font=(FF, 9, "bold"), relief="flat", padding=(8, 8), borderwidth=0)
+                    font=(FF, scaled_font(9), "bold"), relief="flat", padding=(8, 8), borderwidth=0)
         s.map("Treeview.Heading", background=[("active", t["hover"])])
         s.configure("Side.Treeview", background=t["side"], fieldbackground=t["side"],
-                    rowheight=44)
+                    rowheight=scaled_font(44))
         s.map("Side.Treeview", background=[("selected", t["sel"])])
 
         for w in ("TEntry", "TCombobox", "TSpinbox"):
@@ -2698,12 +2721,9 @@ class App:
                 if info.get("url") and messagebox.askyesno(tr(APP_NAME),tr('Открыть страницу сборок GitHub?'),parent=self.root):
                     webbrowser.open(info["url"])
             return
-        if info["newer"]:
-            if messagebox.askyesno(tr(APP_NAME), f"{tr('Доступна версия ')}{info['version']}{tr(' (у вас ')}{APP_VERSION}{tr(').\nОткрыть страницу загрузки?')}", parent=self.root):
-                if info["url"].startswith("https://github.com/"):
-                    webbrowser.open(info["url"])
-        elif manual:
-            messagebox.showinfo(tr(APP_NAME), tr('У вас последняя версия.'), parent=self.root)
+        if info["newer"] or manual:
+            from feature_dialogs import updates
+            updates(self,info)
 
     def check_breaches(self):
         if not self.vault.active():
@@ -2893,6 +2913,7 @@ class App:
 
     # ---------------- вход
     def show_login(self):
+        self._auth_epoch=getattr(self,"_auth_epoch",0)+1
         new = not self.vault.exists()
         t = self.t
         f = ttk.Frame(self.root)
@@ -3021,7 +3042,9 @@ class App:
 
     def hello_login(self, err_label):
         """Verify OS user presence off the Tk event loop; never send password to browser."""
-        import asyncio
+        epoch=self._auth_epoch
+        def report(text):
+            if self._auth_epoch==epoch and err_label.winfo_exists():err_label.config(text=text,foreground=self.t["bad"])
         hwnd = self.root.winfo_id()
         if sys.platform == "win32":
             import ctypes
@@ -3030,10 +3053,11 @@ class App:
         def work():
             try:
                 if not self.hello.verify(hwnd):
-                    self._q.put(lambda: err_label.config(text=tr('Подтверждение Windows Hello отменено')))
+                    self._q.put(lambda: report(tr('Подтверждение Windows Hello отменено')))
                     return
                 password = self.hello.retrieve_after_verification()
                 def finish():
+                    if self._auth_epoch!=epoch or self.vault.unlocked:return
                     try:
                         if not self.vault.exists():
                             raise VaultError(tr('Хранилище отсутствует'))
@@ -3045,7 +3069,7 @@ class App:
                                          foreground=self.t["bad"])
                 self._q.put(finish)
             except (HelloUnavailable, OSError, ValueError, KeyError) as ex:
-                self._q.put(lambda msg=str(ex): err_label.config(text=msg, foreground=self.t["bad"]))
+                self._q.put(lambda msg=str(ex): report(msg))
         threading.Thread(target=work, daemon=True).start()
 
     def configure_hello(self):
@@ -3073,12 +3097,14 @@ class App:
         if sys.platform == "win32":
             import ctypes
             hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
+        epoch=self._auth_epoch
         def work():
             import asyncio
             try:
                 if not self.hello.verify(hwnd):
                     self._q.put(lambda: messagebox.showwarning("Windows Hello", tr('Проверка не пройдена.')))
                     return
+                if self._auth_epoch!=epoch or not self.vault.unlocked or not self.vault.verify_password(password):return
                 self.hello.enroll(password)
                 self._q.put(lambda: messagebox.showinfo("Windows Hello", tr('Быстрый вход включён. Секрет защищён DPAPI текущего пользователя Windows; это не аппаратная привязка к Hello.')))
             except (HelloUnavailable, OSError, ValueError) as ex:
@@ -3101,6 +3127,7 @@ class App:
         for text, menu in ((tr('Файл'), self._file_menu()), (tr('Инструменты'), self._tools_menu()),
                            (tr('Справка'), self._help_menu())):
             ttk.Menubutton(menus, text=tr(text), menu=menu).pack(side="left", padx=3)
+        ttk.Button(head,text=tr("☰ Разделы"),command=self.toggle_sidebar).pack(side="left")
         ttk.Button(head, text=tr('Заблокировать'), command=self.lock).pack(side="right")
         ttk.Button(head, text=tr('Светлая / тёмная'), command=self.toggle_theme).pack(side="right", padx=8)
 
@@ -3127,8 +3154,9 @@ class App:
         compact = self.root.winfo_width() / scale < 1100
         body = ttk.Notebook(f) if compact else ttk.PanedWindow(f, orient="horizontal")
         body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
+        self.body=body;self.compact=compact;self._sidebar_hidden=False
 
-        side_fr = ttk.Frame(body, style="Side.TFrame", width=240)
+        side_fr = self.side_panel = ttk.Frame(body, style="Side.TFrame", width=240)
         ttk.Label(side_fr, text=tr('БИБЛИОТЕКА'), style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
         navigation = ttk.Frame(side_fr, style="Side.TFrame")
         self.side = ttk.Treeview(navigation, show="tree", selectmode="browse", style="Side.Treeview")
@@ -3157,7 +3185,7 @@ class App:
         center = ttk.Frame(body)
         toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
         toolbar.pack(fill="x")
-        ttk.Label(toolbar, text=tr('Поиск по названию, логину или тегу'),
+        ttk.Label(toolbar, text=tr("Поиск по словам; category:Работа tag:важное is:weak"),
                   style="Muted.TLabel").pack(side="bottom", anchor="w", pady=(8, 0))
         ttk.Label(toolbar, text=tr('Записи'), style="Section.TLabel").pack(side="left", padx=(0, 18))
         self.search = tk.StringVar()
@@ -3166,12 +3194,19 @@ class App:
         self.search_entry.pack(side="left", fill="x", expand=True)
         ttk.Button(toolbar, text=tr('Найти'), style="Compact.TButton",
                    command=lambda: self.search_entry.focus_set()).pack(side="left", padx=(8, 0))
+        filter_bar=ttk.Frame(center,style="Panel.TFrame",padding=(16,4))
+        filter_bar.pack(fill="x")
+        self.issue_choices={tr("Все записи"):None,tr("Слабые пароли"):ISSUE_WEAK,tr("Повторы паролей"):ISSUE_REUSED,tr("Устаревшие пароли"):ISSUE_OLD,tr("Без пароля"):ISSUE_EMPTY}
+        self.issue_filter=tk.StringVar(value=tr("Все записи"))
+        picker=ttk.Combobox(filter_bar,textvariable=self.issue_filter,values=list(self.issue_choices),state="readonly",width=22)
+        picker.pack(side="left");picker.bind("<<ComboboxSelected>>",lambda event:self.refresh_list())
+        ttk.Button(filter_bar,text=tr("Перенести выбранные…"),command=lambda:feature_dialogs.categories(self,move=True)).pack(side="right")
         lst = ttk.Frame(center, style="Panel.TFrame")
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
         horizontal = ttk.Scrollbar(lst, orient="horizontal")
         horizontal.pack(side="bottom", fill="x")
-        self.tree = ttk.Treeview(lst, columns=cols, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(lst, columns=cols, show="headings", selectmode="extended")
         from tkinter import font as tkfont
         column_font = tkfont.Font(family=FF, size=10)
         for key, name, width in self.COLUMNS:
@@ -3231,6 +3266,43 @@ class App:
         if self._totp_job:
             r.after_cancel(self._totp_job)
         self._totp_tick()
+        if self.settings.get("sidebar_collapsed"): self.toggle_sidebar(persist=False)
+        self.root.after(800,self.backup_reminder)
+
+    def notify(self,text,action=None):
+        if not self.frame or not self.frame.winfo_exists():return
+        old=getattr(self,"_notification",None)
+        if old and old.winfo_exists():old.destroy()
+        panel=self._notification=ttk.Frame(self.frame,style="Panel.TFrame",padding=(18,12))
+        ttk.Label(panel,text=text,style="Panel.TLabel",wraplength=500).pack(side="left")
+        if action:ttk.Button(panel,text=tr("Открыть"),command=action).pack(side="left",padx=12)
+        ttk.Button(panel,text="×",width=3,command=panel.destroy).pack(side="right",padx=(12,0))
+        panel.place(relx=0.5,rely=0.96,anchor="s")
+        self.root.after(10000,lambda:panel.destroy() if panel.winfo_exists() else None)
+
+    def backup_reminder(self):
+        if not self.vault.unlocked or not self.settings.get("backup_reminders"):return
+        day=datetime.now().strftime("%Y-%m-%d")
+        if self.settings.get("backup_reminded")==day:return
+        from product_features import backup_info
+        try:info=backup_info(self.vault,self.settings.get("external_backup_dir"))
+        except OSError:return
+        if info['days'] is None or info['days']>=7:
+            self.settings.set("backup_reminded",day)
+            self.notify(tr("Сохраните отдельную резервную копию на другом диске."),lambda:feature_dialogs.backups(self))
+
+    def toggle_sidebar(self,persist=True):
+        if not hasattr(self,"side_panel") or not self.side_panel.winfo_exists():return
+        if self._sidebar_hidden:
+            if self.compact:
+                self.body.insert(0,self.side_panel,text=tr("Разделы"))
+                self.body.tab(self.side_panel,state="normal")
+            else:self.body.insert(0,self.side_panel,weight=0)
+        else:
+            if self.compact:self.body.hide(self.side_panel)
+            else:self.body.forget(self.side_panel)
+        self._sidebar_hidden=not self._sidebar_hidden
+        if persist:self.settings.set("sidebar_collapsed",self._sidebar_hidden)
 
     def animate_entry(self):
         if not self.settings.get("animations"): return
@@ -3260,6 +3332,7 @@ class App:
         if not item.startswith("cat:"):return
         self.side.selection_set(item)
         menu=self._menu()
+        menu.add_command(label=tr("Изменить категорию…"),command=lambda:feature_dialogs.categories(self,item[4:]))
         menu.add_command(label=tr('Удалить категорию…'),command=lambda:self.delete_category(item[4:]))
         menu.tk_popup(event.x_root,event.y_root)
 
@@ -3307,6 +3380,8 @@ class App:
         m.add_command(label=tr('Проверка на утечки (интернет)…'), command=self.check_breaches)
         m.add_command(label=tr('Генератор паролей…'),
                       command=lambda: GeneratorDialog(self, self.root))
+        m.add_command(label=tr("Категории…"),command=lambda:feature_dialogs.categories(self))
+        m.add_command(label=tr("Резервные копии…"),command=lambda:feature_dialogs.backups(self))
         m.add_command(label=tr('Удалить категорию…'), command=self.delete_category)
         m.add_command(label=tr('Очистить корзину'), command=self.empty_trash)
         m.add_separator()
@@ -3567,7 +3642,13 @@ class App:
             ins("", "end", iid="h_cat", text=tr('   КАТЕГОРИИ'), tags=("head",))
             for c in cats:
                 n = sum(1 for e in act if e["category"] == c)
-                ins("", "end", iid="cat:" + c, text=f"  ◇   {c}  ({n})")
+                props=v.meta.get("category_properties",{}).get(c,{})
+                from product_features import COLORS,ICONS
+                color=props.get("color") if props.get("color") in COLORS else self.t["fg"]
+                if self.theme_name=="dark":color=dict(zip(COLORS,("#409cff","#b398ff","#5bd68a","#ffa45c","#ff8293","#bbbcc5"))).get(color,color)
+                icon=props.get("icon") if props.get("icon") in ICONS else "◇"
+                self.side.tag_configure("cat:"+c,foreground=color)
+                ins("", "end", iid="cat:" + c, text=f"  {icon}   {c}  ({n})",tags=("cat:"+c,))
             if unc:
                 ins("", "end", iid="uncat", text=f"{tr('  —   Без категории  (')}{unc})")
         tags = sorted({x for e in act for x in split_tags(e["tags"])}, key=str.lower)
@@ -3618,7 +3699,12 @@ class App:
 
     def refresh_list(self):
         prev = self.tree.selection()
-        q = self.search.get().strip().lower()
+        q = self.search.get().strip()
+        from product_features import matches_query
+        issues=self.vault.audit()
+        issue_ids={label:{e["id"] for problem,e in issues if problem==label} for label in (ISSUE_WEAK,ISSUE_REUSED,ISSUE_OLD,ISSUE_EMPTY)}
+        search_issues=dict(zip(("weak","reused","old","empty"),(issue_ids[label] for label in (ISSUE_WEAK,ISSUE_REUSED,ISSUE_OLD,ISSUE_EMPTY))))
+        chosen=self.issue_choices.get(self.issue_filter.get()) if hasattr(self,"issue_filter") else None
         key, rev = self.sort
 
         def sk(e):
@@ -3626,9 +3712,8 @@ class App:
                 return (not e["favorite"], e["title"].lower())
             return str(e.get(key, "")).lower()
 
-        items = [e for e in self.vault.entries if self._in_filter(e) and (
-            not q or q in " ".join((e["title"], e["url"], e["login"], e["tags"],
-                                    e["note"], e["category"])).lower())]
+        items = [e for e in self.vault.entries if self._in_filter(e) and matches_query(e,q,search_issues)
+                 and (chosen is None or e["id"] in issue_ids[chosen])]
         items.sort(key=sk, reverse=rev)
         self.tree.delete(*self.tree.get_children())
         self.tree.tag_configure("alternate", background=self.t["card"])
@@ -3838,7 +3923,7 @@ class App:
         if path:
             try:
                 shutil.copyfile(self.vault.path, path)
-                messagebox.showinfo(tr(APP_NAME), tr('Копия сохранена. Она зашифрована тем же мастер-паролем.'), parent=self.root)
+                self.notify(tr('Копия сохранена. Она зашифрована тем же мастер-паролем.'))
             except OSError as ex:
                 messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.root)
 
@@ -3931,8 +4016,7 @@ class App:
             return
         ok, _ = self._do(self.vault.change_password, p1)
         if ok:
-            messagebox.showinfo(tr(APP_NAME), tr('Мастер-пароль изменён, хранилище пересохранено.\nСтарые резервные копии в папке backups остались под прежним паролем.'),
-                                parent=self.root)
+            self.notify(tr('Мастер-пароль изменён, хранилище пересохранено.\nСтарые резервные копии в папке backups остались под прежним паролем.'))
 
     def open_data_dir(self):
         d = os.path.dirname(self.vault.path)

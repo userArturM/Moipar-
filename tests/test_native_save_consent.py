@@ -27,7 +27,7 @@ class NativeSaveConsentTests(unittest.TestCase):
                             walk(child)
                     walk(root)
                     entries=[w for w in widgets if isinstance(w,ttk.Entry)]
-                    entries[1].insert(0,'Wrong' if mode=='wrong' else 'ConsentTest!789')
+                    entries[2].insert(0,'Wrong' if mode=='wrong' else 'ConsentTest!789')
                     if mode=='wrong':root.after(300,root.destroy)
                     next(w for w in widgets if isinstance(w,ttk.Button) and
                          w.cget('text')=='Подтвердить и сохранить').invoke()

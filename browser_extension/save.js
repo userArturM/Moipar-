@@ -3,7 +3,7 @@ const autoSave=document.getElementById('autosave');
 function connectionError(error) {
   const message=error?.message || String(error);
   if (/native messaging host.*not found|host not found/i.test(message))
-    return 'Нет связи с приложением. Установите версию 4.4 и откройте «Браузеры → Восстановить подключение».';
+    return 'Нет связи с приложением. Установите версию 4.5 и откройте «Браузеры → Восстановить подключение».';
   return message;
 }
 saveButton.addEventListener('click',async()=>{
@@ -15,15 +15,23 @@ saveButton.addEventListener('click',async()=>{
     const url=new URL(tab.url);
     if(url.protocol!=='https:')throw Error('Откройте HTTPS-страницу с формой входа.');
     const [read]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{
-      const inputs=[...document.querySelectorAll('input')].filter(el=>!el.disabled&&el.getClientRects().length>0);
-      const pass=inputs.find(el=>el.autocomplete==='new-password') ||
-        inputs.find(el=>el.autocomplete==='current-password') || inputs.find(el=>el.type==='password');
-      if(!pass?.value)return null;
-      const form=pass.form;
-      const relevant=form?inputs.filter(el=>el.form===form):inputs;
-      const login=relevant.find(el=>el.autocomplete==='username'||el.type==='email') ||
-        relevant.find(el=>el.type==='text'&&/user|login|email/i.test(el.name||el.id||''));
-      return {url:location.href,credentials:{title:location.hostname,login:login?.value||'',password:pass.value}};
+  function capture(scope=document,remembered='') {
+    const fields=[...scope.querySelectorAll('input')].filter(e=>!e.disabled&&e.getClientRects().length>0);
+    const has=(e,token)=>e.autocomplete.toLowerCase().split(/\s+/).includes(token);
+    const passwords=fields.filter(e=>e.type==='password'||has(e,'new-password')||has(e,'current-password'));
+    const active=passwords.includes(document.activeElement)?document.activeElement:null;
+    const pass=passwords.find(e=>has(e,'new-password'))||active||passwords.find(e=>has(e,'current-password'))||
+      (new Set(passwords.map(e=>e.value).filter(Boolean)).size<=1?passwords.find(e=>e.value):null);
+    const relevant=pass?.form?fields.filter(e=>e.form===pass.form):fields;
+    const login=relevant.find(e=>has(e,'username')||has(e,'email')||e.type==='email')||
+      relevant.find(e=>['text','tel'].includes(e.type)&&/user|login|email|identifier|account|phone|mobile/i.test(e.name+' '+e.id))||
+      (relevant.filter(e=>e.type==='text'&&!/search/i.test(e.name+' '+e.id)).length===1?
+        relevant.find(e=>e.type==='text'&&!/search/i.test(e.name+' '+e.id)):null);
+    return {url:location.href,credentials:{title:location.hostname,login:login?.value||remembered,password:pass?.value||''}};
+  }
+
+      const data=capture();
+      return data.credentials.password?data:null;
     }});
     if(!read?.result)throw Error('Пароль не найден. Заполните форму и нажмите «Сохранить с сайта» перед входом.');
     const latest=await chrome.tabs.get(tab.id);
@@ -39,7 +47,7 @@ saveButton.addEventListener('click',async()=>{
 document.getElementById('connect').addEventListener('click',async()=>{
   try {
     const response=await chrome.runtime.sendNativeMessage('ru.moiparoli.host',{action:'ping'});
-    if(!response?.ok)throw Error('Обновите приложение до версии 4.4');
+    if(!response?.ok)throw Error('Обновите приложение до версии 4.5');
     status.textContent='Приложение подключено · '+response.version;
   }catch(error){status.textContent=connectionError(error)}
 });
@@ -58,8 +66,8 @@ async function sitePreference(){
         const granted=await chrome.permissions.request({origins:[pattern]});
         if(!granted){autoSave.checked=false;return}
         await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(()=>{});
-        await chrome.scripting.registerContentScripts([{id,js:['save_offer.js'],matches:[pattern],runAt:'document_idle'}]);
-        await chrome.scripting.executeScript({target:{tabId:tab.id},files:['save_offer.js']});
+        await chrome.scripting.registerContentScripts([{id,js:['form_capture.js','save_offer.js'],matches:[pattern],runAt:'document_idle'}]);
+        await chrome.scripting.executeScript({target:{tabId:tab.id},files:['form_capture.js','save_offer.js']});
       } else {
         await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(()=>{});
         await chrome.permissions.remove({origins:[pattern]});

@@ -53,6 +53,48 @@ class DesktopTests(unittest.TestCase):
         self.app.set_language('ru')
         self.assertEqual(self.app.tree.heading('category')['text'],'Категория')
 
+    def test_new_feature_dialogs_and_collapsible_sidebar(self):
+        import feature_dialogs
+        self.app.toggle_sidebar()
+        self.assertTrue(self.app._sidebar_hidden)
+        self.app.toggle_sidebar()
+        self.assertFalse(self.app._sidebar_hidden)
+        for open_dialog in (feature_dialogs.categories,feature_dialogs.backups):
+            open_dialog(self.app)
+            self.app.root.update()
+            self.close_dialog()
+        feature_dialogs.updates(self.app,{'version':'4.6','url':'https://github.com/userArturM/Moipar-/releases/tag/v4.6','notes':'Test only'})
+        self.app.root.update();self.close_dialog()
+        self.app.notify('Test notification')
+        self.assertTrue(self.app._notification.winfo_exists())
+
+    def test_font_size_multi_selection_search_and_session_lock(self):
+        first=self.app.vault.add({'title':'GitHub Work','login':'alice','password':'Strong!789'})
+        second=self.app.vault.add({'title':'Other','login':'bob','password':'OtherStrong!789'})
+        self.app.settings.set('font_size',14);self.app.apply_theme();self.app.show_main()
+        self.assertEqual(str(self.app.tree.cget('selectmode')),'extended')
+        self.app.tree.selection_set([first['id'],second['id']])
+        self.assertEqual(len(self.app.tree.selection()),2)
+        self.app.search.set('github alice')
+        self.assertEqual(self.app.tree.get_children(),(first['id'],))
+        self.app.settings.set('lock_on_session_lock',True)
+        with patch('moi_paroli.win_session_locked',return_value=True):self.app._watch_tick()
+        self.assertFalse(self.app.vault.unlocked)
+
+    def test_late_hello_success_cannot_unlock_a_new_locked_session(self):
+        self.app.lock()
+        error=m.ttk.Label(self.app.root)
+        jobs=[]
+        class DelayedThread:
+            def __init__(self,target,**kwargs):jobs.append(target)
+            def start(self):pass
+        with patch('moi_paroli.threading.Thread',DelayedThread),patch.object(self.app.hello,'verify',return_value=True),patch.object(self.app.hello,'retrieve_after_verification',return_value='UITestPassword!789'):
+            self.app.hello_login(error)
+            self.app.lock()
+            jobs[0]()
+            while not self.app._q.empty():self.app._q.get_nowait()()
+        self.assertFalse(self.app.vault.unlocked)
+
     def test_search_theme_and_lock(self):
         row = self.app.vault.add({"title": "Example", "login": "demo", "password": "Example!789"})
         self.app.refresh_all()

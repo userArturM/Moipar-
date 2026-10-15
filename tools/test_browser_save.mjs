@@ -51,3 +51,16 @@ const offered=await offer('enabled');
 assert.equal(offered.calls.length,1);
 assert.equal(offered.message.credentials.password,'');
 console.log('Save offers require matching site, opt-in and browser permission');
+let twoStepListener;
+const twoStepCalls=[];
+const twoStepChrome={runtime:{onMessage:{addListener:fn=>twoStepListener=fn},sendNativeMessage:async(host,message)=>{twoStepCalls.push(structuredClone(message));return {ok:true}}},
+  storage:{local:{get:async key=>({[key]:true})}},permissions:{contains:async()=>true},action:{setBadgeText:()=>{},setTitle:()=>{}}};
+vm.runInNewContext(fs.readFileSync('browser_extension/background.js','utf8'),{chrome:twoStepChrome,URL,Date,Map});
+const twoStepSender={url:'https://example.test/password',tab:{id:2,url:'https://example.test/password'}};
+const sendTwoStep=message=>new Promise(resolve=>twoStepListener(message,twoStepSender,resolve));
+await sendTwoStep({action:'remember_login',url:'https://example.test/username',login:'two-step@example.test'});
+await sendTwoStep({action:'offer_save',url:'https://example.test/password',credentials:{login:'',password:'FakeStep2!789'}});
+await sendTwoStep({action:'offer_save',url:'https://example.test/password',credentials:{login:'',password:'FakeStep2!789'}});
+assert.equal(twoStepCalls.length,1,'Click and submit must not open duplicate native dialogs');
+assert.equal(twoStepCalls[0].credentials.login,'two-step@example.test');
+console.log('Two-step username stays within the tab/site; duplicate offers are suppressed');

@@ -16,3 +16,8 @@ node_modules/
 package-lock.json
 previous_release/
 portable/
+
+*.pfx
+*.p12
+hello_verify.exe
+*.part

@@ -203,7 +203,10 @@ def save_record(host,candidate):
     ttk.Label(frame,text=tr('Сохранить пароль'),font=("Segoe UI",20,"bold")).pack(anchor="w")
     ttk.Label(frame,text=host,font=("Segoe UI",12,"bold")).pack(anchor="w",pady=(8,16))
     ttk.Label(frame,text=tr('Данные сайта')).pack(anchor="w")
-    ttk.Label(frame,text=candidate["login"] or tr('Без логина'),wraplength=420).pack(anchor="w",pady=8)
+    login=ttk.Entry(frame)
+    login.insert(0,candidate["login"])
+    login.pack(fill="x",pady=8)
+    ttk.Label(frame,text=tr("При двухэтапном входе проверьте или введите логин.")).pack(anchor="w")
     display=ttk.Entry(frame,show="•",width=44)
     display.insert(0,candidate["password"])
     display.configure(state="readonly")
@@ -228,7 +231,9 @@ def save_record(host,candidate):
             if keypath.get().strip():
                 with open(keypath.get().strip(),"rb") as f: keydata=f.read()
             vault.unlock(master.get(),keydata)
-            result=save_to_vault(vault,host,candidate)
+            updated=dict(candidate,login=login.get())
+            if len(updated["login"])>1024:raise ValueError("Login too long")
+            result=save_to_vault(vault,host,updated)
             root.destroy()
         except (VaultError,OSError,ValueError):
             status.config(text=tr('Не удалось сохранить. Проверьте мастер-пароль, ключевой файл и доступ к хранилищу.'))
@@ -245,7 +250,7 @@ def save_record(host,candidate):
 
 def handle(msg, selector=select_record, saver=save_record):
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.4","supports":["get_credentials","save_credentials"]}
+        return {"ok":True,"version":"4.5","supports":["get_credentials","save_credentials"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)

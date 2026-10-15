@@ -21,11 +21,16 @@ fillButton.addEventListener('click', async () => {
         if (location.origin !== expectedOrigin || window !== window.top) return false;
         const candidates = [...document.querySelectorAll('input')].filter(el =>
           !el.disabled && !el.readOnly && el.getClientRects().length > 0);
-        const pass = candidates.find(el => el.type === 'password');
-        if (!pass) return false;
-        const user = candidates.find(el => ['email', 'text'].includes(el.type) &&
-          (el.autocomplete === 'username' || /user|login|email/i.test(el.name || el.id || '')))
-          || candidates.find(el => ['email', 'text'].includes(el.type));
+        const has=(el,token)=>el.autocomplete.toLowerCase().split(/\s+/).includes(token);
+        const pass=candidates.find(el=>has(el,'current-password'))||
+          candidates.find(el=>el.type==='password'&&!has(el,'new-password'));
+        const fields=pass?.form?candidates.filter(el=>el.form===pass.form):candidates;
+        const eligible=fields.filter(el=>['email','text','tel'].includes(el.type)&&
+          !/search|query|^q$/i.test(el.name||el.id||''));
+        const user=eligible.find(el=>has(el,'username')||has(el,'email')||el.type==='email')||
+          eligible.find(el=>/user|login|email|identifier|account|phone|mobile/i.test(el.name+' '+el.id))||
+          (eligible.length===1?eligible[0]:null);
+        if(!pass&&!user)return false;
         function setValue(el, value) {
           if (!el) return;
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;

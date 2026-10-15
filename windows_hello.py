@@ -125,7 +125,7 @@ class HelloUnlock:
         try:
             result = subprocess.run([str(helper), str(int(hwnd))],
                                              creationflags=subprocess.CREATE_NO_WINDOW,
-                                             check=False, timeout=120)
+                                             check=False, timeout=120, capture_output=True)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise HelloUnavailable('Проверка Hello недоступна или истекло время ожидания') from exc
         if result.returncode == 0:
