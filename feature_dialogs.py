@@ -107,7 +107,7 @@ def backups(app):
             key_path=filedialog.askopenfilename(parent=window,title=tr('Ключевой файл резервной копии'))
             if not key_path:return
             try:key=open(key_path,'rb').read()
-            except OSError as exc:status.config(text=str(exc));return
+            except OSError as exc:status.config(text=tr(str(exc)));return
         status.config(text=tr('Проверка…'))
         def worker():
             try:

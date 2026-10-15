@@ -66,6 +66,21 @@ class BitoraBrandTests(unittest.TestCase):
             self.assertFalse(loaded.apply_midnight_design())
             self.assertEqual(loaded.get('theme'),'light')
 
+    def test_atelier_migration_runs_once_and_preserves_existing_data_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            settings=app.Settings(str(Path(folder)/'settings.json'))
+            settings.data.update(theme='light',design_version='midnight',sidebar_collapsed=True,
+                                 vault_path='D:/existing/vault.dat',language='en')
+            self.assertTrue(settings.apply_atelier_design())
+            self.assertEqual(settings.get('design_version'),'midnight-atelier')
+            self.assertFalse(settings.get('sidebar_collapsed'))
+            self.assertEqual(settings.get('vault_path'),'D:/existing/vault.dat')
+            self.assertEqual(settings.get('language'),'en')
+            settings.set('theme','light')
+            self.assertFalse(settings.apply_midnight_design())
+            self.assertFalse(settings.apply_atelier_design())
+            self.assertEqual(settings.get('theme'),'light')
+
     def test_update_prefers_new_name_and_accepts_legacy_name(self):
         for names,chosen in ((['MoiParoli-Setup.exe','Bitora-password-Setup.exe'],'Bitora-password-Setup.exe'),
                              (['MoiParoli-Setup.exe'],'MoiParoli-Setup.exe')):

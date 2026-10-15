@@ -39,6 +39,11 @@ def line_icon(canvas,name,x,y,size,color,width=1.6):
     elif name=='plus':line(12,5,12,19);line(5,12,19,12)
     elif name=='search':oval(3,3,17,17);line(15,15,22,22)
     elif name=='copy':rect(8,8,21,21);line(16,4,4,4,4,16)
+    elif name in ('eye','eye-off'):
+        line(2,12,6,7,12,5,18,7,22,12,18,17,12,19,6,17,2,12);oval(9,9,15,15)
+        if name=='eye-off':line(3,3,21,21)
+    elif name=='filter':line(3,6,21,6);line(6,12,18,12);line(9,18,15,18)
+    elif name=='sort':line(5,4,5,20,2,17);line(5,20,8,17);line(12,5,21,5);line(12,12,18,12);line(12,19,15,19)
     elif name=='lock':rect(5,10,19,22);line(8,10,8,6,10,3,14,3,16,6,16,10)
     elif name=='more':
         for xx in (5,12,19):canvas.create_oval(*p(xx-1,11),*p(xx+1,13),fill=color,outline='')
@@ -46,9 +51,10 @@ def line_icon(canvas,name,x,y,size,color,width=1.6):
 
 class DesignButton(tk.Canvas):
     def __init__(self,parent,text,command,palette,*,kind='secondary',icon=None,
-                 width=None,height=40,scale=1,font_size=10,vertical=False):
+                 width=None,height=40,scale=1,font_size=10,vertical=False,align='center',badge=''):
         self.palette=palette;self.kind=kind;self.command=command;self.label=text
         self.icon=icon;self.scale=scale;self.vertical=vertical;self.disabled=False;self.selected=False;self.hover=False
+        self.align=align;self.badge=str(badge)
         self.text_font=tkfont.Font(parent,family='Segoe UI',size=font_size)
         self.parent_bg=palette['side'] if kind=='rail' else palette['bg']
         minimum=self.text_font.measure(text)+int((40 if icon else 28)*scale)
@@ -69,6 +75,8 @@ class DesignButton(tk.Canvas):
         if 'state' in kwargs:self.disabled=kwargs.pop('state')=='disabled'
         if 'text' in kwargs:self.label=kwargs.pop('text')
         if 'command' in kwargs:self.command=kwargs.pop('command')
+        if 'badge' in kwargs:self.badge=str(kwargs.pop('badge'))
+        if 'icon' in kwargs:self.icon=kwargs.pop('icon')
         if kwargs:super().configure(**kwargs)
         if hasattr(self,'text_font'):self.draw()
 
@@ -90,20 +98,109 @@ class DesignButton(tk.Canvas):
         if w<2:return
         primary=self.kind=='primary'
         fill=t['accent'] if primary else t['sel'] if self.selected else t['hover'] if self.hover else self.parent_bg
-        color=t['muted'] if self.disabled else t['accent_fg'] if primary else t['accent'] if self.selected else t['muted'] if self.kind=='rail' else t['fg']
-        border=t['accent'] if self.focus_get() is self else '' if self.kind in ('rail','chip') else t['border'] if not primary else t['accent']
+        color=t['muted'] if self.disabled else t['accent_fg'] if primary else t['accent'] if self.selected or self.kind=='text' else t['muted'] if self.kind=='rail' else t['fg']
+        border=t['accent'] if self.focus_get() is self else '' if self.kind in ('rail','chip','text') else t['border'] if not primary else t['accent']
         rounded(self,1,1,w-2,h-2,9*s,fill,border)
         if self.vertical:
             if self.icon:line_icon(self,self.icon,w/2-9*s,8*s,18*s,color,1.7*s)
             self.create_text(w/2,h-13*s,text=self.label,font=self.text_font,fill=color)
         else:
             label=self.label
-            while label and self.text_font.measure(label)>w-(42 if self.icon else 24)*s:label=label[:-1]
+            reserve=(42 if self.icon else 24)*s+(self.text_font.measure(self.badge)+16*s if self.badge else 0)
+            while label and self.text_font.measure(label)>w-reserve:label=label[:-1]
             if label!=self.label:label=label.rstrip()+'…'
             total=self.text_font.measure(label)+(25*s if self.icon else 0)
-            start=(w-total)/2
+            start=14*s if self.align=='left' else (w-total)/2
             if self.icon:line_icon(self,self.icon,start,h/2-8*s,16*s,color,1.6*s)
             self.create_text(start+(25*s if self.icon else 0),h/2,text=label,font=self.text_font,fill=color,anchor='w')
+            if self.badge:self.create_text(w-14*s,h/2,text=self.badge,font=self.text_font,fill=color,anchor='e')
+
+
+class IconButton(DesignButton):
+    """Quiet keyboard-reachable action with a visible hover/focus explanation."""
+    def __init__(self,parent,text,command,palette,icon,scale=1):
+        self.hint=text;self._tip=None;self._tip_job=None
+        super().__init__(parent,'',command,palette,kind='text',icon=icon,width=int(34*scale),height=32,scale=scale)
+        self.bind('<Enter>',self._show_hint,add='+');self.bind('<FocusIn>',self._show_hint,add='+')
+        for event in ('<Leave>','<FocusOut>','<Unmap>','<Destroy>'):self.bind(event,self._hide_hint,add='+')
+
+    def configure(self,cnf=None,**kwargs):
+        if 'text' in kwargs:
+            self.hint=kwargs.pop('text')
+            if self.icon in ('eye','eye-off'):self.icon='eye-off' if self.hint in ('Скрыть','Hide') else 'eye'
+        return super().configure(cnf,**kwargs)
+
+    config=configure
+
+    def cget(self,key):
+        return self.hint if key=='text' else super().cget(key)
+
+    def _show_hint(self,event=None):
+        self._hide_hint()
+        def reveal():
+            self._tip_job=None
+            if not self.winfo_exists() or not self.winfo_ismapped():return
+            self._tip=tk.Toplevel(self);self._tip.overrideredirect(True)
+            label=tk.Label(self._tip,text=self.hint,bg=self.palette['card'],fg=self.palette['fg'],padx=10,pady=6,font=('Segoe UI',9))
+            label.pack();self._tip.update_idletasks()
+            x=min(self.winfo_rootx(),self.winfo_screenwidth()-self._tip.winfo_reqwidth()-8)
+            self._tip.geometry(f'+{max(0,x)}+{self.winfo_rooty()+self.winfo_height()+6}')
+        self._tip_job=self._root().after(350,reveal)
+
+    def _hide_hint(self,event=None):
+        if self._tip_job:
+            self._root().after_cancel(self._tip_job);self._tip_job=None
+        if self._tip:
+            try:self._tip.destroy()
+            except tk.TclError:pass
+            self._tip=None
+
+
+class StatusPill(tk.Canvas):
+    def __init__(self,parent,text,palette,scale=1):
+        self.palette=palette;self.label=text;self.scale=scale
+        self.label_font=tkfont.Font(parent,family='Segoe UI',size=9)
+        super().__init__(parent,width=int(self.label_font.measure(text)+42*scale),height=int(30*scale),
+                         bg=palette['side'],borderwidth=0,highlightthickness=0)
+        self.bind('<Configure>',self.draw)
+
+    def draw(self,event=None):
+        self.delete('all');s=self.scale;t=self.palette;h=self.winfo_height();w=self.winfo_width()
+        rounded(self,1,1,w-2,h-2,15*s,t['sel'])
+        self.create_oval(12*s,h/2-3*s,18*s,h/2+3*s,fill=t['accent'],outline='')
+        self.create_text(25*s,h/2,text=self.label,font=self.label_font,fill=t['accent'],anchor='w')
+
+
+class SearchField(tk.Canvas):
+    def __init__(self,parent,variable,palette,scale,font_size,placeholder):
+        super().__init__(parent,bg=palette['bg'],highlightthickness=0,height=int(48*scale),borderwidth=0)
+        self.palette=palette;self.scale=scale
+        self.entry=tk.Entry(self,textvariable=variable,bg=palette['panel'],fg=palette['fg'],
+            insertbackground=palette['fg'],relief='flat',borderwidth=0,font=('Segoe UI',font_size))
+        self.slot=self.create_window((42*scale,24*scale),window=self.entry,anchor='w')
+        self.placeholder=tk.Label(self,text=placeholder,bg=palette['panel'],fg=palette['muted'],font=('Segoe UI',font_size),anchor='w')
+        self.placeholder.bind('<Button-1>',lambda event:self.entry.focus_set())
+        def hint(event=None):
+            if not variable.get() and self.focus_get() is not self.entry:
+                self.placeholder.place(x=int(42*scale),y=int(11*scale))
+            else:self.placeholder.place_forget()
+        self._hint=hint
+        self.shortcut=tk.Label(self,text='Ctrl F',bg=palette['card'],fg=palette['muted'],font=('Segoe UI',8),padx=5,pady=2)
+        self._variable=variable;self._trace=variable.trace_add('write',lambda *args:hint())
+        self.entry.bind('<FocusIn>',hint);self.entry.bind('<FocusOut>',hint)
+        self.bind('<Destroy>',lambda event:variable.trace_remove('write',self._trace) if event.widget is self else None)
+        self.bind('<Configure>',self.draw)
+
+    def draw(self,event=None):
+        self.delete('surface');w=self.winfo_width();h=self.winfo_height();t=self.palette;s=self.scale
+        surface=rounded(self,1,1,w-2,h-2,12*s,t['panel'],t['border']);self.addtag_withtag('surface',surface)
+        self.tag_lower(surface)
+        self.delete('search-icon')
+        before=set(self.find_all());line_icon(self,'search',14*s,h/2-8*s,16*s,t['muted'])
+        for item in set(self.find_all())-before:self.addtag_withtag('search-icon',item)
+        self.coords(self.slot,42*s,h/2);self.itemconfigure(self.slot,width=max(20,w-108*s))
+        self.shortcut.place(x=max(42,int(w-58*s)),rely=.5,anchor='w')
+        self._hint()
 
 
 def button(parent,text='',command=None,style='',width=None,state='normal',**kwargs):
@@ -116,9 +213,9 @@ def button(parent,text='',command=None,style='',width=None,state='normal',**kwar
     scale=max(1.0,float(parent.tk.call('tk','scaling'))/(96/72))
     font_size=getattr(parent._root(),'_midnight_font_size',10)
     result=DesignButton(parent,text,command or (lambda:None),palette,
-        kind='primary' if style=='Accent.TButton' else 'secondary',
+        kind='primary' if style=='Accent.TButton' else 'text' if style in ('TextAction.TButton','Quiet.TButton') else 'secondary',
         width=max(38,int(width*8*scale)) if width else None,
-        height=36,scale=scale,font_size=font_size)
+        height=32 if style=='TextAction.TButton' else 36,scale=scale,font_size=max(9,font_size-1) if style=='TextAction.TButton' else font_size)
     try:background=ttk.Style(parent).lookup(parent.cget('style') or 'TFrame','background')
     except tk.TclError:background=palette['bg']
     if background:result.parent_bg=background;result.configure(bg=background)
@@ -150,6 +247,7 @@ class RecordList(tk.Canvas):
         super().__init__(parent,background=palette['bg'],highlightthickness=0,borderwidth=0,takefocus=True)
         self.model=model;model.view=self;self.vault=vault;self.palette=palette;self.scale=scale
         self.row_height=int(78*scale);self.ids=[];self.anchor=None;self.drawn=[]
+        self.hover_id=None
         self.title_font=tkfont.Font(self,family='Segoe UI',size=font_size+1,weight='bold')
         self.sub_font=tkfont.Font(self,family='Segoe UI',size=max(9,font_size-1))
         self.avatar_font=tkfont.Font(self,family='Segoe UI',size=font_size+3)
@@ -166,6 +264,7 @@ class RecordList(tk.Canvas):
         self.bind('<Return>',lambda e:edit());self.bind('<Delete>',lambda e:delete())
         self.bind('<Control-c>',lambda e:copy_login());self.bind('<Control-Shift-C>',lambda e:copy_password())
         self.bind('<FocusIn>',lambda e:self.draw());self.bind('<FocusOut>',lambda e:self.draw())
+        self.bind('<Motion>',self.hover_at);self.bind('<Leave>',lambda e:self.hover_at(None))
         self.yscroll_callback=None
         self.configure(yscrollcommand=self._scrolled)
 
@@ -186,6 +285,11 @@ class RecordList(tk.Canvas):
             else:high=middle-1
         return text[:low]+'…' if low else ''
 
+    def hover_at(self,event):
+        index=self.index_at(event.y) if event else None
+        item=self.ids[index] if index is not None else None
+        if item!=self.hover_id:self.hover_id=item;self.draw()
+
     def draw(self):
         if not self.winfo_exists():return
         self.delete('all');self.drawn=[]
@@ -198,8 +302,9 @@ class RecordList(tk.Canvas):
             item=self.ids[index];entry=self.vault.get(item)
             if not entry:continue
             y=index*self.row_height;active=item in selected
-            if active:rounded(self,1,y+2*s,w-3,self.row_height-4*s,10*s,t['sel'])
-            else:self.create_line(12*s,y+self.row_height,w-12*s,y+self.row_height,fill=t['border'])
+            if active:rounded(self,1,y+2*s,w-3,self.row_height-4*s,10*s,t['sel'],t['border'])
+            elif item==self.hover_id:rounded(self,1,y+2*s,w-3,self.row_height-4*s,10*s,t['hover'])
+            if active:rounded(self,3*s,y+24*s,3*s,30*s,1.5*s,t['accent'])
             rounded(self,13*s,y+19*s,38*s,38*s,10*s,t['card'],t['border'])
             self.create_text(32*s,y+38*s,text=(entry['title'].strip()[:1] or '?').upper(),font=self.avatar_font,fill=t['accent'] if active else t['fg'])
             left=66*s;space=max(30,w-left-38*s)

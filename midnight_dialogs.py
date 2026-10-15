@@ -57,6 +57,7 @@ def _modal(title,message,parent,choices,initial=None,show=None):
 
 class Messages:
     def _ask(self,name,title='',message='',**kwargs):
+        title=tr(title);message=tr(str(message))
         parent=kwargs.get('parent')
         if parent is None or not hasattr(parent._root(),'_bitora_app'):
             return getattr(native_messagebox,name)(title,message,**kwargs)
@@ -81,6 +82,7 @@ class Messages:
 
 class Inputs:
     def askstring(self,title,prompt,**kwargs):
+        title=tr(title);prompt=tr(prompt)
         parent=kwargs.get('parent')
         if parent is None or not hasattr(parent._root(),'_bitora_app'):
             return native_simpledialog.askstring(title,prompt,**kwargs)

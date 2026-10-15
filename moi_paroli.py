@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora Paswword Manager 4.7.0 — менеджер личных паролей для Windows.
+Bitora Paswword Manager 4.8.0 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -50,7 +50,7 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 try:
     import tkinter as tk
     from tkinter import ttk, messagebox, simpledialog, filedialog
-    from midnight_ui import DesignButton,RecordModel,RecordList,rounded
+    from midnight_ui import DesignButton,RecordModel,RecordList,rounded,SearchField,IconButton,StatusPill
     from midnight_ui import button as midnight_button
     from midnight_dialogs import messagebox,simpledialog
 except ImportError:  # tkinter нужен только для окна
@@ -58,7 +58,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Bitora Paswword Manager"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.7.0"
+APP_VERSION = "4.8.0"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -909,9 +909,15 @@ class Settings:
         return self.data.get(key, self.DEFAULTS.get(key))
 
     def apply_midnight_design(self):
-        if self.get("design_version")=="midnight":return False
+        if self.get("design_version") in ('midnight','midnight-atelier'):return False
         self.data.update(theme="dark",sidebar_collapsed=True,design_version="midnight")
         self.set("design_version","midnight")
+        return True
+
+    def apply_atelier_design(self):
+        if self.get('design_version')=='midnight-atelier':return False
+        self.data.update(theme='dark',sidebar_collapsed=False,design_version='midnight-atelier')
+        self.set('design_version','midnight-atelier')
         return True
 
     def set(self, key, value):
@@ -1381,9 +1387,9 @@ def start_tray(app):
 FF = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
 
-DARK = {"bg": "#141c27", "side": "#101720", "panel": "#1b2635", "card": "#223044",
-        "fg": "#edf3fc", "muted": "#a5b4c9", "accent": "#a7e0d7", "accent_hi": "#c1eee8",
-        "accent_fg": "#132f2c", "sel": "#24433f", "border": "#334154", "hover": "#29394d",
+DARK = {"bg": "#101923", "side": "#0c141e", "panel": "#192532", "card": "#20303d",
+        "fg": "#e8f0f4", "muted": "#a1b3c1", "accent": "#b5e9d5", "accent_hi": "#c9f2e4",
+        "accent_fg": "#123629", "sel": "#24433c", "border": "#2d3e4c", "hover": "#20303d",
         "good": "#8ddcb7", "warn": "#edc58e", "bad": "#ffa6af"}
 LIGHT = {"bg": "#f2f5f8", "side": "#e7edf3", "panel": "#ffffff", "card": "#f1f5f8",
          "fg": "#1b2a3d", "muted": "#596a7d", "accent": "#23685d", "accent_hi": "#1c594f",
@@ -1837,10 +1843,10 @@ class EntryDialog:
         name=next((key for key in TEMPLATES if tr(key)==self.tpl.get()),self.tpl.get())
         tpl = TEMPLATES.get(name, {})
         if tpl.get("category") and not self.vars["category"].get().strip():
-            self.vars["category"].set(tpl["category"])
+            self.vars["category"].set(tr(tpl["category"]))
         if tpl.get("fields") and not self.fields.get("1.0", "end").strip():
             self.fields.insert("1.0", format_fields(
-                [{"name": n, "value": "", "secret": s} for n, s in tpl["fields"]]))
+                [{"name": tr(n), "value": "", "secret": s} for n, s in tpl["fields"]]))
 
     def _toggle(self):
         self.pw_entry.config(show="" if self.show_var.get() else "•")
@@ -1907,7 +1913,7 @@ class AuditDialog:
         for i, (text, e) in enumerate(issues):
             iid = str(i)
             self.ids[iid] = e["id"]
-            self.tree.insert("", "end", iid=iid, values=(text, e["title"], e["login"]))
+            self.tree.insert("", "end", iid=iid, values=(tr(text), e["title"], e["login"]))
         self.tree.pack(fill="both", expand=True)
         ttk.Label(frm, text=tr('Двойной клик — перейти к записи'), foreground=app.t["muted"]).pack(
             anchor="w", pady=(6, 0))
@@ -2051,7 +2057,7 @@ class SettingsDialog:
         try:
             parse_hotkey(hk)
         except ValueError as ex:
-            messagebox.showwarning(tr(APP_NAME), f"{tr('Горячая клавиша: ')}{ex}", parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), f"{tr('Горячая клавиша: ')}{tr(str(ex))}", parent=self.top)
             return
         repo = self.repo.get().strip()
         if repo and not REPO_RE.match(repo):
@@ -2121,7 +2127,7 @@ class AttachmentsDialog:
             with open(path, "rb") as f:
                 data = f.read()
         except OSError as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{ex}", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{tr(str(ex))}", parent=self.top)
             return
         ok, _ = self.app._do(self.app.vault.add_attachment, self.eid, os.path.basename(path), data)
         if ok:
@@ -2144,7 +2150,7 @@ class AttachmentsDialog:
                     f.write(data)
                 messagebox.showinfo(tr(APP_NAME), tr('Файл сохранён.'), parent=self.top)
             except OSError as ex:
-                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.top)
+                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{tr(str(ex))}", parent=self.top)
 
     def remove(self):
         sel = self.tree.selection()
@@ -2293,7 +2299,7 @@ class KeyfileDialog:
             with open(path, "wb") as f:
                 f.write(content)
         except OSError as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить файл:\n')}{ex}", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить файл:\n')}{tr(str(ex))}", parent=self.top)
             return
         self._apply(pw, content, path)
 
@@ -2308,7 +2314,7 @@ class KeyfileDialog:
             with open(path, "rb") as f:
                 content = f.read()
         except OSError as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{ex}", parent=self.top)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{tr(str(ex))}", parent=self.top)
             return
         if not content:
             messagebox.showerror(tr(APP_NAME), tr('Файл пустой.'), parent=self.top)
@@ -2444,6 +2450,7 @@ class App:
         localization.set_language(self.settings.get("language"))
         self.root.title(tr(APP_NAME))
         self.settings.apply_midnight_design()
+        self.settings.apply_atelier_design()
         vp = self.settings.get("vault_path")
         self.vault = Vault(vp if vp else os.path.join(data_dir(), "vault.dat"))
         self.vault.backup_dir = os.path.join(data_dir(), "backups")
@@ -2551,6 +2558,11 @@ class App:
         s.configure("Brand.TLabel", background=t["side"], foreground=t["fg"], font=(FF, scaled_font(15), "bold"))
         s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, scaled_font(22), "bold"))
         s.configure('LoginBrand.TLabel',background=t['bg'],foreground=t['fg'],font=(FF,scaled_font(16),'bold'))
+        s.configure('AtelierBrand.TLabel',background=t['side'],foreground=t['fg'],font=(FF,scaled_font(15),'bold'))
+        s.configure('AtelierDetailTitle.TLabel',background=t['panel'],foreground=t['fg'],font=(FF,scaled_font(20),'bold'))
+        s.configure('AtelierHero.TLabel',background=t['bg'],foreground=t['fg'],font=(FF,scaled_font(26),'bold'))
+        s.configure('Atelier.TMenubutton',background=t['side'],foreground=t['muted'],padding=(8,6),borderwidth=0,relief='flat',arrowcolor=t['muted'])
+        s.map('Atelier.TMenubutton',background=[('active',t['hover'])])
         s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, scaled_font(10)))
         s.configure("SideHeading.TLabel", background=t["side"], foreground=t["muted"], font=(FF, scaled_font(9), "bold"))
         s.configure("Mono.TLabel", background=t["panel"], foreground=t["fg"], font=(MONO, 11))
@@ -2584,7 +2596,7 @@ class App:
                     font=(FF, scaled_font(9), "bold"), relief="flat", padding=(8, 8), borderwidth=0)
         s.map("Treeview.Heading", background=[("active", t["hover"])])
         s.configure("Side.Treeview", background=t["side"], fieldbackground=t["side"],
-                    rowheight=scaled_font(44))
+                    rowheight=scaled_font(38))
         s.map("Side.Treeview", background=[("selected", t["sel"])])
 
         for w in ("TEntry", "TCombobox", "TSpinbox"):
@@ -2887,7 +2899,7 @@ class App:
                 n = pwned_count(e["password"])
             except Exception as ex:
                 self.post(lambda: messagebox.showwarning(
-                    tr(APP_NAME), f"{tr('Не удалось проверить (нужен интернет):\n')}{ex}", parent=self.root))
+                    tr(APP_NAME), f"{tr('Не удалось проверить (нужен интернет):\n')}{tr(str(ex))}", parent=self.root))
                 return
             self.post(lambda: self._pwned_result(e, n))
         threading.Thread(target=work, daemon=True).start()
@@ -2912,7 +2924,7 @@ class App:
         try:
             shutil.copyfile(self.vault.path, target)
         except OSError as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось скопировать:\n')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось скопировать:\n')}{tr(str(ex))}", parent=self.root)
             return
         self.vault.path = target
         self.vault._sig = self.vault._disk_sig()
@@ -2931,7 +2943,7 @@ class App:
             if not (isinstance(blob, dict) and blob.get("magic") in ("passvault", "passvault-v1")):
                 raise ValueError(tr('это не файл хранилища'))
         except (OSError, ValueError) as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Файл не подходит:\n')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Файл не подходит:\n')}{tr(str(ex))}", parent=self.root)
             return
         if not messagebox.askyesno(tr(APP_NAME), tr('Программа будет работать с выбранным файлом вместо хранилища на этом компьютере (прежний файл останется на месте). Продолжить?'), parent=self.root):
             return
@@ -2985,7 +2997,7 @@ class App:
             self.lock()
             return False, None
         except (OSError, VaultError) as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить данные:\n')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить данные:\n')}{tr(str(ex))}", parent=self.root)
             return False, None
         except ValueError as ex:
             messagebox.showwarning(tr(APP_NAME),feature_dialogs.friendly_error(ex),parent=self.root)
@@ -3006,7 +3018,7 @@ class App:
             self.refresh_all()
             self.set_status(tr('Конфликты разрешены. Выбранные версии сохранены.'))
         except (VaultError, OSError, ValueError) as ex:
-            messagebox.showwarning(tr(APP_NAME), str(ex), parent=self.root)
+            messagebox.showwarning(tr(APP_NAME), tr(str(ex)), parent=self.root)
 
     def set_status(self, text, color=None):
         self.status_left.config(text=tr(text), foreground=color or self.t["good"])
@@ -3155,7 +3167,7 @@ class App:
                             with open(kf["path"], "rb") as fh:
                                 content = fh.read()
                         except OSError as ex:
-                            err.config(text=f"{tr('Не удаётся прочитать ключевой файл: ')}{ex}",
+                            err.config(text=f"{tr('Не удаётся прочитать ключевой файл: ')}{tr(str(ex))}",
                                        foreground=t["bad"])
                             return
                     self.vault.unlock(pw, content)
@@ -3174,10 +3186,10 @@ class App:
                 err.config(text=tr('Для этого хранилища нужен ключевой файл'), foreground=t["bad"])
                 return
             except VaultError as ex:
-                err.config(text=f"{tr('Файл хранилища повреждён: ')}{ex}{tr('. Можно восстановить из резервной копии (папка backups).')}", foreground=t["bad"])
+                err.config(text=f"{tr('Файл хранилища повреждён: ')}{tr(str(ex))}{tr('. Можно восстановить из резервной копии (папка backups).')}", foreground=t["bad"])
                 return
             except OSError as ex:
-                err.config(text=f"{tr('Ошибка доступа к файлу: ')}{ex}", foreground=t["bad"])
+                err.config(text=f"{tr('Ошибка доступа к файлу: ')}{tr(str(ex))}", foreground=t["bad"])
                 return
             self._fails = 0
             self.show_main()
@@ -3217,11 +3229,11 @@ class App:
                         self._fails = 0
                         self.show_main()
                     except (VaultError, OSError, ValueError) as ex:
-                        err_label.config(text=f"{tr('Не удалось открыть хранилище: ')}{ex}",
+                        err_label.config(text=f"{tr('Не удалось открыть хранилище: ')}{tr(str(ex))}",
                                          foreground=self.t["bad"])
                 self._q.put(finish)
             except (HelloUnavailable, OSError, ValueError, KeyError) as ex:
-                self._q.put(lambda msg=str(ex): report(msg))
+                self._q.put(lambda msg=tr(str(ex)): report(msg))
         threading.Thread(target=work, daemon=True).start()
 
     def configure_hello(self):
@@ -3260,102 +3272,84 @@ class App:
                 self.hello.enroll(password)
                 self._q.put(lambda: messagebox.showinfo("Windows Hello", tr('Быстрый вход включён. Секрет защищён DPAPI текущего пользователя Windows; это не аппаратная привязка к Hello.')))
             except (HelloUnavailable, OSError, ValueError) as ex:
-                self._q.put(lambda msg=str(ex): messagebox.showerror("Windows Hello", msg))
+                self._q.put(lambda msg=tr(str(ex)): messagebox.showerror("Windows Hello", msg))
         threading.Thread(target=work, daemon=True).start()
 
     # ---------------- главный экран
     def show_main(self):
         self.root.unbind("<Return>")
         self._touch()
-        t = self.t
-        f = ttk.Frame(self.root)
-        self._swap(f)
-
-        shell=f
+        t=self.t
+        self.root.update_idletasks()
         scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
         font_size=max(9,min(14,int(self.settings.get("font_size") or 10)))
-        rail_height=max(46,min(68,(self.root.winfo_height()-100*scale)/(6*scale)))
-        rail_width=int(max(80,80*font_size/10)*scale)
-        self.rail=ttk.Frame(shell,style="Side.TFrame",padding=(7,18))
+        compact=self.root.winfo_width()/scale<820
+        self.compact=compact;self.atelier_layout=True
+        f=ttk.Frame(self.root);self._swap(f)
+        head=self.atelier_header=ttk.Frame(f,style="Side.TFrame",padding=(26,16))
+        head.pack(fill="x")
+        if self.icon:
+            self.atelier_logo=self.icon.zoom(max(1,round(38*scale/8))).subsample(8)
+            ttk.Label(head,image=self.atelier_logo,style="Side.TLabel").pack(side="left",padx=(0,12))
+        brand=ttk.Frame(head,style="Side.TFrame");brand.pack(side="left")
+        ttk.Label(brand,text="Bitora",style="AtelierBrand.TLabel").pack(anchor="w")
+        ttk.Label(brand,text="Paswword Manager",style="SideMuted.TLabel").pack(anchor="w")
+        IconButton(head,tr('Заблокировать'),self.lock,dict(t,bg=t['side']),'lock',scale).pack(side='right',padx=(12,0))
+        menu=self._menu()
+        menu.add_cascade(label=tr("Файл"),menu=self._file_menu())
+        menu.add_cascade(label=tr("Инструменты"),menu=self._tools_menu())
+        menu.add_cascade(label=tr("Справка"),menu=self._help_menu())
+        ttk.Menubutton(head,text=tr("Меню"),menu=menu,style="Atelier.TMenubutton").pack(side="right",padx=8)
+        self.hello_status=StatusPill(head,"Windows Hello" if self.hello.enabled() else tr("Хранилище открыто"),t,scale)
+        if not compact:self.hello_status.pack(side="right",padx=12)
+        ttk.Separator(f).pack(fill="x")
+        shell=ttk.Frame(f);shell.pack(fill="both",expand=True)
+        rail_width=int((76 if compact else 208)*scale)
+        self.rail=ttk.Frame(shell,style="Side.TFrame",padding=(10,22))
         self.rail.pack(side="left",fill="y")
-        if self.logo:ttk.Label(self.rail,image=self.logo,style="Side.TLabel").pack(pady=(0,20))
         self.rail_buttons={}
-        for value,icon,label in (("all","key",tr("Записи")),("fav","star",tr("Избранное")),("trash","trash",tr("Корзина"))):
-            button=DesignButton(self.rail,label,lambda selected=value:self.set_library_filter(selected),t,
-                kind="rail",icon=icon,width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True)
-            button.pack(fill="x",pady=4);self.rail_buttons[value]=button
-        DesignButton(self.rail,tr("Категории"),self.toggle_sidebar,t,kind="rail",icon="folder",width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True).pack(fill="x",pady=4)
-        DesignButton(self.rail,tr("Браузеры"),lambda:BrowserDialog(self,self.root),t,kind="rail",icon="browser",width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True).pack(fill="x",pady=4)
-        DesignButton(self.rail,tr("Настройки"),lambda:SettingsDialog(self,self.root),t,kind="rail",icon="settings",width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True).pack(side="bottom",fill="x",pady=4)
+        for value,icon,label in (("all","key",tr("Все записи")),("fav","star",tr("Избранное")),("trash","trash",tr("Корзина"))):
+            btn=DesignButton(self.rail,label,lambda selected=value:self.set_library_filter(selected),t,
+                kind="rail",icon=icon,width=rail_width,height=58 if compact else 42,scale=scale,
+                font_size=9 if compact else font_size,vertical=compact,align="left")
+            btn.pack(fill="x",pady=3);self.rail_buttons[value]=btn
+        DesignButton(self.rail,tr("Категории"),self.toggle_sidebar,t,kind="rail",icon="folder",
+            width=rail_width,height=58 if compact else 38,scale=scale,font_size=9 if compact else font_size,vertical=compact,align="left").pack(fill="x",pady=(14,4))
+        DesignButton(self.rail,tr("Настройки"),lambda:SettingsDialog(self,self.root),t,kind="rail",icon="settings",
+            width=rail_width,height=58 if compact else 42,scale=scale,font_size=9 if compact else font_size,vertical=compact,align="left").pack(side="bottom",fill="x",pady=(16,0))
         f=ttk.Frame(shell);f.pack(side="left",fill="both",expand=True)
-        head=ttk.Frame(f,style="Panel.TFrame",padding=(24,14));head.pack(fill="x")
-        ttk.Label(head,text=tr("Личное хранилище"),style="Section.TLabel").pack(side="left")
-        for text,menu in ((tr("Файл"),self._file_menu()),(tr("Инструменты"),self._tools_menu()),(tr("Справка"),self._help_menu())):
-            ttk.Menubutton(head,text=text,menu=menu,style="Header.TMenubutton").pack(side="right",padx=3)
-        self.hello_status=ttk.Label(head,text="Windows Hello" if self.hello.enabled() else tr("Хранилище открыто"),style="Muted.TLabel")
-        self.hello_status.pack(side="right",padx=18)
-
-        hero = ttk.Frame(f, padding=(24, 18))
-        hero.pack(fill="x")
-        DesignButton(hero,tr("Новая запись"),self.add,t,kind="primary",icon="plus",height=40,scale=scale,font_size=font_size).pack(side="right",pady=8)
-        ttk.Label(hero,text="BITORA PASWWORD MANAGER",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,5))
-        ttk.Label(hero,text=tr("Записи"),style="Hero.TLabel").pack(anchor="w")
-        overview=ttk.Frame(f)
-        self._build_stats(overview)
-
-        controls=ttk.Frame(f,padding=(24,4));controls.pack(fill="x")
+        hero=ttk.Frame(f,padding=(28,26,28,18));hero.pack(fill="x")
+        self.atelier_add=DesignButton(hero,tr("Новая запись"),self.add,t,kind="primary",icon="plus",height=42,scale=scale,font_size=font_size)
+        self.atelier_add.pack(side="right",pady=5)
+        ttk.Label(hero,text=tr("ЛИЧНОЕ ПРОСТРАНСТВО"),style="Eyebrow.TLabel").pack(anchor="w",pady=(0,6))
+        self.atelier_title=ttk.Label(hero,text=tr("Ваше хранилище"),style="AtelierHero.TLabel")
+        self.atelier_title.pack(anchor="w")
+        overview=ttk.Frame(f);self._build_stats(overview)
+        self.search=tk.StringVar();self.search.trace_add("write",lambda *args:self.refresh_list())
+        self.atelier_search=SearchField(f,self.search,t,scale,font_size,tr("Найти запись…"))
+        self.atelier_search.pack(fill="x",padx=28,pady=(0,10))
+        self.search_entry=self.atelier_search.entry
+        controls=ttk.Frame(f,padding=(28,0));controls.pack(fill="x")
         self.category_chips=ttk.Frame(controls);self.category_chips.pack(side="left")
         self.category_chips_key=None
         controls.bind("<Configure>",lambda event:self.refresh_category_chips())
-        self.search=tk.StringVar()
-        self.search.trace_add("write",lambda *args:self.refresh_list())
-        search_shell=tk.Frame(controls,bg=t["card"],highlightthickness=1,highlightbackground=t["border"])
-        search_shell.pack(side="right",fill="x",expand=True,padx=(20,0))
-        ttk.Label(search_shell,text=tr("Поиск"),style="CardMuted.TLabel").pack(side="left",padx=(12,6))
-        self.search_entry=ttk.Entry(search_shell,textvariable=self.search,style="MidnightSearch.TEntry",width=18)
-        self.search_entry.pack(side="left",fill="x",expand=True,padx=(0,8),pady=3)
-
-        bottom = ttk.Frame(f, style="Side.TFrame", padding=(14, 5))
-        bottom.pack(side="bottom", fill="x")
-        self.status_left = ttk.Label(bottom, text="", style="Side.TLabel", foreground=t["good"])
-        self.status_left.pack(side="left")
-        self.status_right = ttk.Label(bottom, text="", style="SideMuted.TLabel")
-        self.status_right.pack(side="right")
-
-        self.root.update_idletasks()
-        scale = max(1.0, float(self.root.tk.call("tk", "scaling")) / (96/72))
-        compact = self.root.winfo_width() / scale < 1000
-        if compact:self.hello_status.pack_forget()
-        body = ttk.Notebook(f) if compact else ttk.PanedWindow(f, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
-        self.body=body;self.compact=compact;self._sidebar_hidden=False
-
-        side_fr = self.side_panel = ttk.Frame(body, style="Side.TFrame", width=200)
-        ttk.Label(side_fr, text=tr('БИБЛИОТЕКА'), style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
-        navigation = ttk.Frame(side_fr, style="Side.TFrame")
-        self.side = ttk.Treeview(navigation, show="tree", selectmode="browse", style="Side.Treeview")
-        self.side.column("#0", width=190)
-        self.side.tag_configure("head", foreground=t["muted"], font=(FF, 8, "bold"))
-        tools = ttk.Frame(side_fr, style="Side.TFrame", padding=12)
-        tools.pack(side="bottom", fill="x")
-        midnight_button(tools,text=tr('Браузеры'),style="Ghost.TButton",command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=3)
-        ttk.Separator(tools).pack(fill="x", pady=(0, 12))
-        for text, command in ((tr('Аудит безопасности'), self.audit),
-                              (tr('Генератор паролей'), lambda: GeneratorDialog(self, self.root)),
-                              (tr('Настройки'), lambda: SettingsDialog(self, self.root))):
-            midnight_button(tools, text=tr(text), style="Ghost.TButton", command=command).pack(fill="x", pady=3)
-        navigation.pack(fill="both", expand=True)
-        self.side.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=6)
-        nav_scroll = ttk.Scrollbar(navigation, orient="vertical", command=self.side.yview)
-        nav_scroll.pack(side="right", fill="y")
-        self.side.configure(yscrollcommand=nav_scroll.set)
-        self.side.bind("<<TreeviewSelect>>", self.on_side_select)
-        self.side.bind("<Button-3>", self.category_menu)
-        if compact:
-            body.add(side_fr, text=tr('Разделы'))
-        else:
-            body.add(side_fr, weight=0)
-
+        bottom=ttk.Frame(f,padding=(28,10));bottom.pack(side="bottom",fill="x")
+        self.status_left=ttk.Label(bottom,text="",style="BgMuted.TLabel");self.status_left.pack(side="left")
+        self.status_right=ttk.Label(bottom,text="",style="BgMuted.TLabel");self.status_right.pack(side="right")
+        body=ttk.Notebook(f) if compact else ttk.PanedWindow(f,orient="horizontal")
+        body.pack(fill="both",expand=True,padx=28,pady=(12,16))
+        self.body=body;self._sidebar_hidden=False
+        side_fr=self.side_panel=ttk.Frame(body if compact else self.rail,style="Side.TFrame",width=rail_width)
+        if not compact:side_fr.pack(fill="both",expand=True,pady=(4,0))
+        navigation=ttk.Frame(side_fr,style="Side.TFrame");navigation.pack(fill="both",expand=True)
+        self.side=ttk.Treeview(navigation,show="tree",selectmode="browse",style="Side.Treeview")
+        self.side.column("#0",width=max(100,rail_width-24),minwidth=60)
+        self.side.tag_configure("head",foreground=t["muted"],font=(FF,max(8,font_size-2)))
+        self.side.pack(side="left",fill="both",expand=True,padx=(0,4))
+        nav_scroll=ttk.Scrollbar(navigation,orient="vertical",command=self.side.yview)
+        nav_scroll.pack(side="right",fill="y");self.side.configure(yscrollcommand=nav_scroll.set)
+        self.side.bind("<<TreeviewSelect>>",self.on_side_select);self.side.bind("<Button-3>",self.category_menu)
+        if compact:body.add(side_fr,text=tr("Разделы"))
         center = self.center_panel = ttk.Frame(body)
         filter_bar=ttk.Frame(center,style="Panel.TFrame",padding=(16,10))
         self.filter_bar=filter_bar
@@ -3369,8 +3363,8 @@ class App:
         self.library_picker.bind("<<ComboboxSelected>>",lambda event:self.set_library_filter(self.library_choices[self.library_filter.get()]))
         utilities=ttk.Frame(center,padding=(4,0,4,8));utilities.pack(fill="x")
         self.list_count=ttk.Label(utilities,text="",style="BgMuted.TLabel");self.list_count.pack(side="left")
-        midnight_button(utilities,text=tr("Фильтры"),style="Quiet.TButton",command=self.toggle_filters).pack(side="right")
-        midnight_button(utilities,text=tr("Сортировка"),style="Quiet.TButton",command=lambda:self.sort_by("title")).pack(side="right",padx=8)
+        IconButton(utilities,tr('Фильтры'),self.toggle_filters,t,'filter',scale).pack(side='right')
+        IconButton(utilities,tr('Сортировка'),lambda:self.sort_by('title'),t,'sort',scale).pack(side='right',padx=8)
         lst = ttk.Frame(center)
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
@@ -3403,7 +3397,7 @@ class App:
             body.add(center, text=tr('Записи'))
             body.select(center)
         else:
-            body.add(center, weight=3)
+            body.add(center, weight=1)
 
         det = self.detail_panel = ttk.Frame(body, width=400)
         detail_canvas = self.detail_canvas = tk.Canvas(det, bg=t["bg"], highlightthickness=0, width=400)
@@ -3446,7 +3440,7 @@ class App:
         if self._totp_job:
             r.after_cancel(self._totp_job)
         self._totp_tick()
-        if self.settings.get("sidebar_collapsed"): self.toggle_sidebar(persist=False)
+        if compact or self.settings.get("sidebar_collapsed"): self.toggle_sidebar(persist=False)
         self.root.after(800,self.backup_reminder)
 
     def notify(self,text,action=None,action_label=None):
@@ -3535,7 +3529,7 @@ class App:
         if not hasattr(self,"category_chips") or not self.category_chips.winfo_exists():return
         cats=self.vault.categories()
         scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
-        available=self.root.winfo_width()/scale-self.rail.winfo_reqwidth()/scale-96-260
+        available=self.root.winfo_width()/scale-self.rail.winfo_reqwidth()/scale-96
         limit=max(0,min(3,int((available-65)/108)))
         key=(tuple(cats[:limit]),self.cat_filter)
         if self.category_chips_key==key:return
@@ -3550,6 +3544,12 @@ class App:
 
     def toggle_sidebar(self,persist=True):
         if not hasattr(self,"side_panel") or not self.side_panel.winfo_exists():return
+        if getattr(self,'atelier_layout',False) and not self.compact:
+            if self._sidebar_hidden:self.side_panel.pack(fill='both',expand=True,pady=(4,0))
+            else:self.side_panel.pack_forget()
+            self._sidebar_hidden=not self._sidebar_hidden
+            if persist:self.settings.set('sidebar_collapsed',self._sidebar_hidden)
+            return
         if self._sidebar_hidden:
             if self.compact:
                 self.body.insert(0,self.side_panel,text=tr("Разделы"))
@@ -3706,13 +3706,14 @@ class App:
 
     # ---------------- панель деталей
     def _build_details(self, p):
+        self._detail_expanded=False
         p.columnconfigure(0, weight=1)
         header=ttk.Frame(p,style="Panel.TFrame");header.grid(row=0,column=0,sticky="we",pady=(4,22))
         scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
         self.d_avatar=tk.Canvas(header,width=int(48*scale),height=int(48*scale),bg=self.t["panel"],highlightthickness=0)
         self.d_avatar.pack(side="left",padx=(0,12))
         heading=ttk.Frame(header,style="Panel.TFrame");heading.pack(side="left",fill="x",expand=True)
-        self.d_title=ttk.Label(heading,text="",style="Title.TLabel",wraplength=250,justify="left");self.d_title.pack(anchor="w")
+        self.d_title=ttk.Label(heading,text="",style="AtelierDetailTitle.TLabel",wraplength=250,justify="left");self.d_title.pack(anchor="w")
         self.d_domain=ttk.Label(heading,text="",style="Muted.TLabel",wraplength=250);self.d_domain.pack(anchor="w",pady=(3,0))
         self.d_empty = ttk.Label(p, text=tr('Выберите запись в списке\nили нажмите «＋ Добавить»'),
                                  style="Muted.TLabel", justify="center")
@@ -3727,12 +3728,13 @@ class App:
             palette=dict(self.t,bg=self.t["panel"],panel=self.t["card"])
             fr=RoundedCard(p,palette)
             fr.body.configure(style="Card.TFrame")
-            ttk.Label(fr.body,text=tr(text),style="CardMuted.TLabel",font=(FF,9)).pack(anchor="w")
+            caption={'login':tr('Логин'),'password':tr('Пароль'),'totp':tr('Код подтверждения')}.get(key,tr(text))
+            ttk.Label(fr.body,text=caption,style="CardMuted.TLabel",font=(FF,9)).pack(anchor="w")
             line=ttk.Frame(fr.body,style="Card.TFrame");line.pack(fill="x",pady=(5,0))
             var=tk.StringVar()
             actions=ttk.Frame(line,style="Card.TFrame");actions.pack(side="right")
             for btn_text,cmd in reversed(btns):
-                b=midnight_button(actions,text=btn_text,command=cmd,style="TextAction.TButton")
+                b=IconButton(actions,btn_text,cmd,dict(self.t,bg=self.t['card']),'eye' if key=='password' and btn_text==tr('Показать') else 'copy',scale)
                 b.pack(side="right",padx=(5,0))
                 if key=="password" and btn_text==tr("Показать"):self.pw_btn=b
             label=ttk.Label(line,textvariable=var,style="CardMono.TLabel" if key in ("password","totp") else "Card.TLabel",wraplength=180,justify="left")
@@ -3753,20 +3755,29 @@ class App:
 
         nf = ttk.Frame(p, style="Panel.TFrame")
         ttk.Label(nf, text=tr('ЗАМЕТКА'), style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
-        self.d_note = tk.Text(nf, height=4, width=30, wrap="word", relief="flat", state="disabled",
-                              bg=self.t["card"], fg=self.t["fg"], highlightthickness=0,
-                              padx=8, pady=6)
+        self.d_note = tk.Text(nf, height=3, width=30, wrap="word", relief="flat", state="disabled",
+                              bg=self.t["panel"], fg=self.t["muted"], highlightthickness=0,
+                              padx=0, pady=6,font=(FF,10))
         self.d_note.pack(fill="x", pady=(2, 0))
         nf.grid(row=10, column=0, sticky="we", pady=6)
         self.dfields["note"] = nf
 
+        self.d_meta=ttk.Frame(p,style='Panel.TFrame',padding=(0,14))
+        self.d_meta.columnconfigure(0,weight=1);self.d_meta.columnconfigure(1,weight=1)
+        for col,key,label in ((0,'category',tr('Категория')),(1,'updated',tr('Обновлено'))):
+            cell=ttk.Frame(self.d_meta,style='Panel.TFrame');cell.grid(row=0,column=col,sticky='we')
+            anchor='w' if col==0 else 'e'
+            ttk.Label(cell,text=label,style='CardMuted.TLabel',background=self.t['panel']).pack(anchor=anchor)
+            ttk.Label(cell,textvariable=self.dvars[key],style='Panel.TLabel',wraplength=160).pack(anchor=anchor,pady=(4,0))
+        self.d_meta.grid(row=11,column=0,sticky='we')
         self.act_normal=ttk.Frame(p,style="Panel.TFrame")
         button_palette=dict(self.t,bg=self.t["panel"])
-        DesignButton(self.act_normal,tr("Изменить"),self.edit,button_palette,scale=scale,height=36,font_size=9).pack(side="left")
+        DesignButton(self.act_normal,tr("Изменить"),self.edit,button_palette,kind='primary',scale=scale,height=38,font_size=10).pack(side="left",fill='x',expand=True)
         self.hist_btn=midnight_button(self.act_normal,text=tr("История"),command=self.show_history,style="DetailAction.TButton");self.hist_btn.pack(side="left",padx=8)
         self.fav_btn=midnight_button(self.act_normal,command=self.toggle_fav)
         self.att_btn=midnight_button(self.act_normal,command=self.attachments)
         more=self._menu()
+        more.add_command(label=tr('Дополнительные сведения'),command=self.toggle_detail_fields)
         for label,action in ((tr("Открыть сайт"),self.open_url),(tr("Избранное"),self.toggle_fav),(tr("Вложения"),self.attachments),(tr("⌨ Ввести"),self.autotype_selected),(tr("Утечки?"),self.check_pwned_selected),(tr("Удалить запись"),self.delete)):
             more.add_command(label=label,command=action)
         ttk.Menubutton(self.act_normal,text=tr("Ещё"),menu=more,style="Header.TMenubutton").pack(side="left")
@@ -3774,8 +3785,8 @@ class App:
         midnight_button(self.act_trash, text=tr('Восстановить'), style="Accent.TButton",
                    command=self.restore).pack(side="left")
         midnight_button(self.act_trash, text=tr('Удалить навсегда'), command=self.purge).pack(side="right")
-        self.act_normal.grid(row=11, column=0, sticky="we", pady=(14, 0))
-        self.act_trash.grid(row=11, column=0, sticky="we", pady=(14, 0))
+        self.act_normal.grid(row=12, column=0, sticky="we", pady=(14, 0))
+        self.act_trash.grid(row=12, column=0, sticky="we", pady=(14, 0))
         self.show_details()
 
     def _on_select(self, _=None):
@@ -3792,6 +3803,7 @@ class App:
         for fr in self.dfields.values():
             fr.grid_remove()
         self.act_normal.grid_remove()
+        self.d_meta.grid_remove()
         self.act_trash.grid_remove()
         if not e:
             self.d_title.config(text="");self.d_domain.config(text="");self.d_avatar.delete("all")
@@ -3802,15 +3814,17 @@ class App:
         self.d_domain.config(text=hostname(e["url"]))
         self.d_avatar.delete("all")
         aw=max(48,self.d_avatar.winfo_reqwidth())
-        rounded(self.d_avatar,0,0,aw,aw,12,self.t["sel"])
+        rounded(self.d_avatar,0,0,aw,aw,12,self.t["card"],self.t['border'])
         self.d_avatar.create_text(aw/2,aw/2,text=(e["title"].strip()[:1] or "?").upper(),font=(FF,18,"bold"),fill=self.t["accent"])
         values = {"url": e["url"], "login": e["login"], "category": e["category"],
                   "tags": e["tags"], "source": e["source"],
                   "updated": e["updated"][:10]}
         for key, val in values.items():
             self.dvars[key].set(val)
-            if val and key!="url":
+            if val and (key=='login' or (self._detail_expanded and key in ('tags','source'))):
                 self.dfields[key].grid()
+        self.dvars['category'].set(e['category'] or tr('Без категории'))
+        self.d_meta.grid()
         self._show_password(e)
         if e["password"]:
             self.dfields["password"].grid()
@@ -3831,6 +3845,10 @@ class App:
             self.hist_btn.config(state="normal" if e["history"] else "disabled")
             n_att = len(e["attachments"])
             self.att_btn.config(text=f"{tr('Вложения (')}{n_att})" if n_att else tr('Вложения'))
+
+    def toggle_detail_fields(self):
+        self._detail_expanded=not self._detail_expanded
+        self.show_details()
 
     def _show_password(self, e):
         self.dvars["password"].set(e["password"] if self.pw_visible else "•" * 10)
@@ -3898,12 +3916,13 @@ class App:
         act = v.active()
         ins = self.side.insert
         self.side.delete(*self.side.get_children())
-        ins("", "end", iid="all", text=f"{tr('  ▤   Все пароли  (')}{len(act)})")
-        ins("", "end", iid="fav", text=f"{tr('  ★   Избранное  (')}{sum((1 for e in act if e['favorite']))})")
+        if not getattr(self,'atelier_layout',False):
+            ins("", "end", iid="all", text=f"{tr('  ▤   Все пароли  (')}{len(act)})")
+            ins("", "end", iid="fav", text=f"{tr('  ★   Избранное  (')}{sum((1 for e in act if e['favorite']))})")
         cats = v.categories()
         unc = sum(1 for e in act if not e["category"])
         if cats or unc:
-            ins("", "end", iid="h_cat", text=tr('   КАТЕГОРИИ'), tags=("head",))
+            if not getattr(self,'atelier_layout',False):ins("", "end", iid="h_cat", text=tr('   КАТЕГОРИИ'), tags=("head",))
             for c in cats:
                 n = sum(1 for e in act if e["category"] == c)
                 props=v.meta.get("category_properties",{}).get(c,{})
@@ -3921,17 +3940,18 @@ class App:
             for tg in tags:
                 n = sum(1 for e in act if tg.lower() in [x.lower() for x in split_tags(e["tags"])])
                 ins("", "end", iid="tag:" + tg, text=f"  #   {tg}  ({n})")
-        ins("", "end", iid="h_sys", text=tr('   СИСТЕМА'), tags=("head",))
-        ins("", "end", iid="trash", text=f"{tr('  ⌫   Корзина  (')}{len(v.trash())})")
-        if not self.side.exists(self.cat_filter):
+        if not getattr(self,'atelier_layout',False):
+            ins("", "end", iid="h_sys", text=tr('   СИСТЕМА'), tags=("head",))
+            ins("", "end", iid="trash", text=f"{tr('  ⌫   Корзина  (')}{len(v.trash())})")
+        if not self.side.exists(self.cat_filter) and self.cat_filter not in ('all','fav','trash'):
             self.cat_filter = "all"
-        self.side.selection_set(self.cat_filter)
+        self.side.selection_set((self.cat_filter,) if self.side.exists(self.cat_filter) else ())
         self.refresh_library_controls()
 
     def set_library_filter(self,value):
-        if not self.side.exists(value):return
+        if not self.side.exists(value) and value not in ('all','fav','trash'):return
         self.cat_filter=value
-        self.side.selection_set(value)
+        self.side.selection_set((value,) if self.side.exists(value) else ())
         self.refresh_list();self.refresh_library_controls()
         if self.compact:self.body.select(self.center_panel)
 
@@ -3943,7 +3963,12 @@ class App:
         self.library_choices.update({tr("Тег: ")+tag:"tag:"+tag for tag in tags})
         self.library_picker.configure(values=list(self.library_choices))
         self.library_filter.set(next((label for label,value in self.library_choices.items() if value==self.cat_filter),tr("Все категории")))
-        for value,button in self.rail_buttons.items():button.configure(style="RailActive.TButton" if value==self.cat_filter else "Rail.TButton")
+        counts={'all':len(self.vault.active()),'fav':sum(bool(e['favorite']) for e in self.vault.active()),'trash':len(self.vault.trash())}
+        for value,button in self.rail_buttons.items():
+            button.configure(style="RailActive.TButton" if value==self.cat_filter else "Rail.TButton",badge=str(counts[value]) if not self.compact and counts[value] else '')
+        if hasattr(self,'atelier_title'):
+            title={'all':tr('Ваше хранилище'),'fav':tr('Избранное'),'trash':tr('Корзина'),'uncat':tr('Без категории')}.get(self.cat_filter,self.cat_filter.partition(':')[2])
+            self.atelier_title.configure(text=title)
         self.refresh_category_chips()
 
     def on_side_select(self, _=None):
@@ -3951,7 +3976,7 @@ class App:
         if not sel:
             return
         if sel[0].startswith("h_"):  # заголовки разделов не выбираются
-            self.side.selection_set(self.cat_filter)
+            self.side.selection_set((self.cat_filter,) if self.side.exists(self.cat_filter) else ())
             return
         if sel[0] != self.cat_filter:
             self.cat_filter = sel[0]
@@ -4189,7 +4214,7 @@ class App:
                     raw = f.read()
             source, items, skipped = parse_csv(raw)
         except (OSError, ValueError) as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось прочитать файл:\n')}{tr(str(ex))}", parent=self.root)
             return
         if not items:
             messagebox.showinfo(tr(APP_NAME), tr('В файле не найдено записей с паролями.'), parent=self.root)
@@ -4212,7 +4237,7 @@ class App:
             try:
                 shred_file(path)
             except OSError as ex:
-                messagebox.showwarning(tr(APP_NAME), f"{tr('Не удалось удалить файл:\n')}{ex}", parent=self.root)
+                messagebox.showwarning(tr(APP_NAME), f"{tr('Не удалось удалить файл:\n')}{tr(str(ex))}", parent=self.root)
 
     def export_encrypted(self):
         path = filedialog.asksaveasfilename(
@@ -4224,7 +4249,7 @@ class App:
                 shutil.copyfile(self.vault.path, path)
                 self.notify(tr('Копия сохранена. Она зашифрована тем же мастер-паролем.'))
             except OSError as ex:
-                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.root)
+                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{tr(str(ex))}", parent=self.root)
 
     def export_csv(self):
         if not messagebox.askyesno(
@@ -4246,7 +4271,7 @@ class App:
                     f.write(export_csv_text(self.vault.active()))
                 messagebox.showinfo(tr(APP_NAME), tr('Файл сохранён. Не забудьте удалить его после использования.'), parent=self.root)
             except OSError as ex:
-                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{ex}", parent=self.root)
+                messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{tr(str(ex))}", parent=self.root)
 
     def restore_backup(self):
         start = self.vault.backups_dir()
@@ -4262,7 +4287,7 @@ class App:
             if not (isinstance(blob, dict) and blob.get("magic") in ("passvault", "passvault-v1")):
                 raise ValueError(tr('это не файл хранилища'))
         except (OSError, ValueError) as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Файл не подходит:\n')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Файл не подходит:\n')}{tr(str(ex))}", parent=self.root)
             return
         backup_password = simpledialog.askstring(APP_NAME, tr('Мастер-пароль резервной копии:'),
                                                    show="•", parent=self.root)
@@ -4278,7 +4303,7 @@ class App:
                     keydata = key.read()
             Vault.validate_backup(path, backup_password, keydata)
         except (VaultError, OSError, ValueError) as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Копия не прошла проверку: ')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Копия не прошла проверку: ')}{tr(str(ex))}", parent=self.root)
             return
         if not messagebox.askyesno(
                 tr(APP_NAME), tr('Текущие данные будут заменены выбранной копией.\nПрежний файл сохранится как vault.dat.before-restore.\n\nПродолжить?'),
@@ -4290,7 +4315,7 @@ class App:
             shutil.copyfile(path, staged)
             os.replace(staged, self.vault.path)
         except OSError as ex:
-            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось восстановить:\n')}{ex}", parent=self.root)
+            messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось восстановить:\n')}{tr(str(ex))}", parent=self.root)
             return
         messagebox.showinfo(tr(APP_NAME), tr('Копия восстановлена. Войдите мастер-паролем этой копии.'),
                             parent=self.root)

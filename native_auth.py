@@ -17,7 +17,7 @@ def unlock_error(error):
         return tr('Не удалось прочитать хранилище. Проверьте выбранный файл и резервные копии.')
     if isinstance(error, OSError):
         return tr('Нет доступа к файлу хранилища или ключевому файлу.')
-    return str(error) if isinstance(error, HelloUnavailable) else tr('Не удалось выполнить действие. Повторите попытку.')
+    return tr(str(error)) if isinstance(error, HelloUnavailable) else tr('Не удалось выполнить действие. Повторите попытку.')
 
 
 def hello_for_vault(path, folder):

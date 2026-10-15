@@ -31,6 +31,44 @@ class DesktopTests(unittest.TestCase):
             if isinstance(w, m.tk.Toplevel):
                 w.destroy()
 
+    def test_english_main_and_dialogs(self):
+        import localization as loc
+        import feature_dialogs
+        import re
+        self.addCleanup(loc.set_language, loc.LANGUAGE)
+        self.app.set_language('en')
+        labels = []
+        def collect(widget):
+            if isinstance(widget, m.tk.Menu): return
+            for option in ('text', 'values'):
+                try: labels.append(str(widget.cget(option)))
+                except (m.tk.TclError, TypeError): pass
+            if isinstance(widget, m.tk.Menu):
+                for index in range((widget.index('end') or 0) + 1):
+                    try: labels.append(widget.entrycget(index, 'label'))
+                    except m.tk.TclError: pass
+            if isinstance(widget, m.tk.Canvas):
+                for item in widget.find_all():
+                    if widget.type(item) == 'text': labels.append(widget.itemcget(item, 'text'))
+            for child in widget.winfo_children(): collect(child)
+        self.app.root.update()
+        collect(self.app.root)
+        def inspect_and_close():
+            collect(self.app.root)
+            self.close_dialog()
+        for cls in (m.GeneratorDialog, m.EntryDialog, m.SettingsDialog, m.AuditDialog):
+            self.app.root.after(100, inspect_and_close)
+            cls(self.app, self.app.root)
+        for show in (feature_dialogs.categories, feature_dialogs.backups, feature_dialogs.duplicates, feature_dialogs.category_trash):
+            show(self.app)
+            self.app.root.update()
+            inspect_and_close()
+        feature_dialogs.updates(self.app, {'version': '4.8.0', 'url': 'https://github.com/userArturM/Moipar-/releases/tag/v4.8.0', 'notes': 'Synthetic release'})
+        self.app.root.update()
+        inspect_and_close()
+        self.maxDiff = None
+        self.assertEqual(sorted(set(label for label in labels if re.search('[А-Яа-яЁё]', label.replace('Русский', '')))), [])
+
     def test_dialogs_open(self):
         for cls in (m.GeneratorDialog, m.EntryDialog, m.SettingsDialog, m.AuditDialog):
             with self.subTest(dialog=cls.__name__):
@@ -93,7 +131,7 @@ class DesktopTests(unittest.TestCase):
     def test_midnight_navigation_and_category_picker(self):
         self.assertEqual(self.app.root.title(),'Bitora Paswword Manager')
         self.assertEqual(self.app.theme_name,'dark')
-        self.assertTrue(self.app._sidebar_hidden)
+        self.assertEqual(self.app._sidebar_hidden,self.app.compact)
         self.assertEqual(tuple(self.app.tree.cget('displaycolumns')),('fav','title','login'))
         row=self.app.vault.add({'title':'Work item','category':'Work','password':'FakeOnly!789'})
         self.app.vault.add({'title':'Other item','category':'Personal','password':'OtherFake!789'})
@@ -104,6 +142,46 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(len(self.app.tree.get_children()),2)
         self.app.root.update()
         self.assertLess(self.app.rail.winfo_width(),self.app.root.winfo_width()/4)
+
+    def test_atelier_has_one_sidebar_full_search_and_compact_metadata(self):
+        self.app.root.tk.call('tk','scaling',96/72)
+        self.app.root.geometry('1360x900');self.app.root.update()
+        self.app.apply_theme();self.app.show_main();self.app.root.update()
+        self.assertFalse(self.app.compact)
+        self.assertFalse(self.app._sidebar_hidden)
+        self.assertEqual(self.app.side_panel.master,self.app.rail)
+        self.assertEqual(len(self.app.body.panes()),2)
+        self.assertEqual(self.app.atelier_header.master,self.app.frame)
+        self.assertLess(self.app.search_entry.winfo_rooty(),self.app.category_chips.winfo_rooty())
+        self.assertNotIn('all',self.app.side.get_children())
+        self.assertNotIn('fav',self.app.side.get_children())
+        row=self.app.vault.add({'title':'Example','category':'Work','password':'FakeOnly!789','tags':'test','source':'Fixture'})
+        self.app.refresh_all();self.app.goto_entry(row['id']);self.app.root.update()
+        self.app.show_details();self.app.root.update()
+        self.assertTrue(self.app.d_meta.winfo_ismapped())
+        self.assertFalse(self.app.dfields['category'].winfo_ismapped())
+        self.assertFalse(self.app.dfields['source'].winfo_ismapped())
+        self.app.toggle_detail_fields();self.app.root.update()
+        self.assertTrue(self.app.dfields['source'].winfo_ismapped())
+        self.app.vault.soft_delete(row['id']);self.app.cat_filter='trash';self.app.refresh_all()
+        self.app.tree.selection_set(row['id']);self.app.show_details();self.app.root.update()
+        self.assertNotEqual(self.app.d_meta.grid_info()['row'],self.app.act_trash.grid_info()['row'])
+        self.app.set_library_filter('all');self.assertEqual(self.app.tree.get_children(),())
+
+    def test_atelier_icon_actions_reveal_and_lock_dispose_tooltip(self):
+        row=self.app.vault.add({'title':'Fixture','login':'fake@example.test','password':'FakeOnly!789'})
+        self.app.refresh_all();self.app.goto_entry(row['id']);self.app.root.update()
+        self.assertIsInstance(self.app.pw_btn,m.IconButton)
+        self.app.pw_btn.invoke();self.assertTrue(self.app.pw_visible)
+        self.assertEqual(self.app.pw_btn.icon,'eye-off')
+        self.app.pw_btn.invoke();self.assertFalse(self.app.pw_visible)
+        self.assertEqual(self.app.pw_btn.icon,'eye')
+        button=self.app.pw_btn
+        button._show_hint();self.app.root.after(450,self.app.root.quit);self.app.root.mainloop()
+        tip=button._tip;self.assertIsNotNone(tip)
+        self.app.lock();self.app.root.update()
+        self.assertFalse(tip.winfo_exists())
+        self.assertFalse(self.app.vault.unlocked)
 
     def test_designed_record_list_selection_keyboard_and_virtualization(self):
         from types import SimpleNamespace

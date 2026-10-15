@@ -26,5 +26,5 @@ class ThemeContractTests(unittest.TestCase):
                 self.assertGreaterEqual(ratio, 4.5)
 
     def test_unchanged_vault_version(self):
-        self.assertEqual(app.APP_VERSION, '4.7.0')
+        self.assertEqual(app.APP_VERSION, '4.8.0')
 
