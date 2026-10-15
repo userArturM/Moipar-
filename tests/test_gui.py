@@ -37,6 +37,42 @@ class DesktopTests(unittest.TestCase):
                 self.app.root.after(100, self.close_dialog)
                 cls(self.app, self.app.root)
 
+    def test_recovery_dialogs_and_duplicate_choices_open_in_both_languages(self):
+        import feature_dialogs
+        for title in ('First','Second'):
+            self.app.vault.add({'title':title,'url':'https://example.test','login':'fake-user','password':'FakeOnly!789','category':'Work'})
+        for language in ('ru','en'):
+            self.app.set_language(language)
+            for show in (feature_dialogs.duplicates,feature_dialogs.category_trash,
+                         lambda app:feature_dialogs.delete_category(app,'Work')):
+                show(self.app);self.app.root.update()
+                windows=[w for w in self.app.root.winfo_children() if isinstance(w,m.tk.Toplevel)]
+                self.assertTrue(windows)
+                self.assertGreater(windows[-1].winfo_height(),100)
+                if show is feature_dialogs.duplicates:
+                    def descendants(widget):
+                        for child in widget.winfo_children():
+                            yield child
+                            yield from descendants(child)
+                    listing=next(w for w in descendants(windows[-1]) if isinstance(w,m.ttk.Treeview))
+                    listing.selection_set('0');listing.event_generate('<<TreeviewSelect>>');self.app.root.update()
+                    choices=[w for w in descendants(windows[-1]) if isinstance(w,m.ttk.Combobox)]
+                    self.assertEqual(len(choices),9)
+                    self.assertTrue(all('FakeOnly' not in w.get() for w in choices))
+                self.close_dialog()
+        self.app.set_language('ru')
+
+    def test_backup_preview_and_browser_diagnostics_open(self):
+        import feature_dialogs
+        with patch.object(feature_dialogs.filedialog,'askopenfilename',return_value=self.app.vault.path),\
+             patch.object(feature_dialogs.simpledialog,'askstring',return_value='UITestPassword!789'):
+            feature_dialogs.backup_preview(self.app)
+            self.app.root.update();self.close_dialog()
+        with patch('browser_registration.diagnose',return_value=[]),\
+             patch('browser_registration.probe_host',return_value={'version':m.APP_VERSION,'save':True,'fill':True}):
+            self.app.root.after(150,self.close_dialog)
+            m.BrowserDialog(self.app,self.app.root)
+
     def test_language_switch_and_animation_finish(self):
         self.app.set_language('en')
         self.app.root.update()

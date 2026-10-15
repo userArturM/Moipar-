@@ -2,11 +2,14 @@ const assert=require('node:assert/strict');
 const bindWorker=require('./browser_test_bridge.cjs');
 function fixture(native){
  const calls=[];
+ const session={};const events={};
  const chrome={runtime:{sendNativeMessage:async(host,message)=>{calls.push(structuredClone(message));return native(message)}},
+  storage:{session:{set:async data=>Object.assign(session,data),get:async key=>({[key]:session[key]}),remove:async key=>{delete session[key]}}},
   action:{setBadgeText:options=>calls.push({action:'badge',...options}),setTitle:options=>calls.push({action:'title',...options})},
-  tabs:{get:async id=>({id,url:'https://example.test/login',active:true})},
+  tabs:{get:async id=>({id,url:'https://example.test/login',active:true}),
+    onRemoved:{addListener:fn=>events.removed=fn},onUpdated:{addListener:fn=>events.updated=fn}},
   scripting:{executeScript:async request=>{calls.push({action:'injected',args:[...request.args]});return [{result:true}]}}};
- return {chrome,calls,...bindWorker(chrome)};
+ return {chrome,calls,session,events,...bindWorker(chrome)};
 }
 (async()=>{
  let release;
@@ -23,12 +26,23 @@ function fixture(native){
  assert(!('password' in response));
  assert.equal(f.calls.find(c=>c.action==='injected').args[1],'SyntheticOnly!789');
  assert.equal(secret.password,'');
+ assert.equal(f.session['result:1'].state,'success');
+ assert(!JSON.stringify(f.session).includes('SyntheticOnly'));
+ assert(!JSON.stringify(f.session).includes('example.test'));
+ // A new worker instance (and a reopened popup) can retrieve session-only status.
+ const restarted=bindWorker(f.chrome);
+ assert.equal((await restarted.dispatch({...message,action:'last_result'})).result.state,'success');
+ assert.equal((await restarted.dispatch({...message,action:'last_result'},{id:'untrusted',url:'https://evil.test'})).ok,false);
+ f.events.updated(1,{url:'https://other.test'});await new Promise(r=>setImmediate(r));
+ assert.equal((await restarted.dispatch({...message,action:'last_result'})).result,null);
  const spoof=fixture(()=>{throw Error('must not contact native host')});
  assert.equal((await spoof.dispatch(message,{id:'untrusted',url:'https://example.test',tab:{id:1}})).ok,false);
  assert.equal(spoof.calls.length,0);
  const disconnected=fixture(()=>{throw Error('Native host disconnected')});
  assert.equal((await disconnected.dispatch({...message})).ok,false);
  assert(disconnected.calls.some(c=>c.action==='badge'&&c.text==='!'));
+ assert.equal(disconnected.session['result:1'].state,'error');
+ assert(!JSON.stringify(disconnected.session).includes('disconnected'));
  const absent=fixture(()=>({ok:true,login:'synthetic',password:'SyntheticOnly!789'}));
  absent.chrome.scripting.executeScript=async()=>[{result:false}];
  const notFilled=await absent.dispatch({...message});
@@ -48,5 +62,7 @@ function fixture(native){
  const first=duplicate.dispatch(message);await new Promise(r=>setImmediate(r));
  assert.equal((await duplicate.dispatch(message)).ok,false);
  finish({ok:false,error:'Cancelled'});await first;
- console.log('Worker checks passed: popup lifetime, native approval, secret disposal, spoof protection, navigation and duplicate requests.');
+ duplicate.events.removed(1);await new Promise(r=>setImmediate(r));
+ assert.equal(Object.keys(duplicate.session).length,0);
+ console.log('Worker checks passed: popup lifetime, session result after restart, native approval, secret disposal, spoof protection, navigation and duplicate requests.');
 })().catch(error=>{console.error(error);process.exitCode=1});

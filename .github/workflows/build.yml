@@ -37,6 +37,7 @@ jobs:
           npx playwright install chromium
           node tools/test_browser_forms.cjs
           node tools/test_browser_advanced.cjs
+          node tools/test_browser_status.cjs
       - name: Build desktop Windows Hello helper
         shell: pwsh
         run: ./tools/build_hello.ps1

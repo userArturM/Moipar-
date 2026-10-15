@@ -29,6 +29,7 @@ import secrets
 import shutil
 import string
 import struct
+import subprocess
 import sys
 import time
 import uuid
@@ -54,7 +55,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.5.4"
+APP_VERSION = "4.5.5"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -540,6 +541,9 @@ class Vault:
         self.meta["categories"]=[name for name in self.meta["categories"] if not removed(name)]
         for entry in self.entries:
             if removed(entry["category"]):entry["category"]=""
+        changes=self.meta.setdefault("category_trash",{})
+        for token,data in (r_meta.get("category_trash") or {}).items():
+            if data.get("mtime","")>changes.get(token,{}).get("mtime",""):changes[token]=data
         self.meta["tombstones"] = tomb
 
     def conflict_snapshot(self):
@@ -1538,7 +1542,7 @@ class RoundedCard(ttk.Frame):
 class BrowserDialog:
     def __init__(self,app,parent):
         from browser_identity import EXTENSION_ID
-        from browser_registration import register,diagnose
+        from browser_registration import register,diagnose,probe_host
         top=_new_top(app,parent,tr('Подключение браузера'))
         frame=_scroll_dialog_body(top,24)
         ttk.Label(frame,text=tr('Браузер и приложение'),font=(FF,18,"bold")).pack(anchor="w")
@@ -1551,6 +1555,12 @@ class BrowserDialog:
                   wraplength=520,foreground=app.t["muted"]).pack(anchor="w",pady=(6,14))
         status=ttk.Label(frame,text="",wraplength=520,justify="left")
         status.pack(fill="x",pady=12)
+        folder=os.path.dirname(sys.executable) if getattr(sys,"frozen",False) else os.path.dirname(__file__)
+        exe=os.path.join(folder,"browser_host.exe")
+        if not os.path.isfile(exe):exe=os.path.join(folder,"dist","browser_host.exe")
+        ttk.Label(frame,text=tr('Версия приложения: ')+APP_VERSION,foreground=app.t['muted']).pack(anchor='w')
+        ttk.Label(frame,text=tr('Регистрация не подтверждает установку расширения. В расширении нажмите «Проверить подключение», чтобы проверить всю цепочку.'),wraplength=520).pack(anchor='w',pady=8)
+        checking={'busy':False}
         def check():
             try:
                 checks=diagnose()
@@ -1559,8 +1569,21 @@ class BrowserDialog:
                 lines=[]
                 for browser,label in names.items():
                     valid=all(item["ok"] for item in checks if item["browser"]==browser)
-                    lines.append(label+": "+(tr('подключение настроено') if valid else tr('требуется восстановление')))
-                status.config(text="\n".join(lines))
+                    lines.append(label+": "+(tr('регистрация настроена') if valid else tr('требуется восстановление')))
+                status.config(text="\n".join(lines)+"\n\n"+tr('Проверка модуля…'))
+                if checking['busy']:return
+                checking['busy']=True
+                def worker():
+                    try:
+                        result=probe_host(exe)
+                        detail=tr('Версия модуля: ')+result['version']+' · '+(tr('Версии совпадают') if result['version']==APP_VERSION else tr('Обновите приложение и расширение'))
+                        if not result['save'] or not result['fill']:detail+='\n'+tr('Нужна новая версия модуля приложения.')
+                    except (OSError,ValueError,subprocess.TimeoutExpired):detail=tr('Модуль приложения не отвечает. Нажмите «Восстановить подключение» или переустановите приложение.')
+                    def finish():
+                        checking['busy']=False
+                        if top.winfo_exists():status.config(text="\n".join(lines)+"\n\n"+detail)
+                    app.post(finish)
+                threading.Thread(target=worker,daemon=True).start()
             except (OSError,ValueError):
                 status.config(text=tr('Не удалось проверить подключение.'))
         def repair():
@@ -3331,13 +3354,13 @@ class App:
         if self.settings.get("sidebar_collapsed"): self.toggle_sidebar(persist=False)
         self.root.after(800,self.backup_reminder)
 
-    def notify(self,text,action=None):
+    def notify(self,text,action=None,action_label=None):
         if not self.frame or not self.frame.winfo_exists():return
         old=getattr(self,"_notification",None)
         if old and old.winfo_exists():old.destroy()
         panel=self._notification=ttk.Frame(self.frame,style="Panel.TFrame",padding=(18,12))
         ttk.Label(panel,text=text,style="Panel.TLabel",wraplength=500).pack(side="left")
-        if action:ttk.Button(panel,text=tr("Открыть"),command=action).pack(side="left",padx=12)
+        if action:ttk.Button(panel,text=action_label or tr("Открыть"),command=action).pack(side="left",padx=12)
         ttk.Button(panel,text="×",width=3,command=panel.destroy).pack(side="right",padx=(12,0))
         panel.place(relx=0.5,rely=0.96,anchor="s")
         self.root.after(10000,lambda:panel.destroy() if panel.winfo_exists() else None)
@@ -3409,11 +3432,7 @@ class App:
                 ttk.Button(frame,text=tr('Удалить'),command=lambda:(top.destroy(),self.delete_category(choice.get()))).pack(pady=12)
                 return
         if not name:return
-        if not messagebox.askyesno(tr(APP_NAME),tr('Удалить категорию «')+name+tr('»? Записи останутся без категории.'),parent=self.root):return
-        ok,_=self._do(self.vault.delete_category,name)
-        if ok:
-            self.cat_filter="all"
-            self.refresh_all()
+        feature_dialogs.delete_category(self,name)
 
     def _file_menu(self):
         m = self._menu()
@@ -3446,6 +3465,8 @@ class App:
         m.add_command(label=tr("Категории…"),command=lambda:feature_dialogs.categories(self))
         m.add_command(label=tr("Резервные копии…"),command=lambda:feature_dialogs.backups(self))
         m.add_command(label=tr('Удалить категорию…'), command=self.delete_category)
+        m.add_command(label=tr("Корзина категорий"),command=lambda:feature_dialogs.category_trash(self))
+        m.add_command(label=tr("Объединить дубли…"),command=lambda:feature_dialogs.duplicates(self))
         m.add_command(label=tr('Очистить корзину'), command=self.empty_trash)
         m.add_separator()
         m.add_command(label=tr('Светлая / тёмная тема'), command=self.toggle_theme)
@@ -3874,7 +3895,15 @@ class App:
             ok, _ = self._do(self.vault.soft_delete, e["id"])
             if ok:
                 self.refresh_all()
-                self.saved_note()
+                entry_id=e["id"]
+                self.notify(tr("Запись перемещена в корзину"),lambda:self.undo_delete(entry_id),action_label=tr("Отменить"))
+
+    def undo_delete(self,entry_id):
+        if not self.vault.unlocked:return
+        entry=self.vault.get(entry_id)
+        if entry and entry["deleted"]:
+            ok,_=self._do(self.vault.restore,entry_id)
+            if ok:self.refresh_all();self.notify(tr("Запись восстановлена"))
 
     def restore(self):
         e = self.selected()

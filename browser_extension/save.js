@@ -3,7 +3,7 @@ const autoSave=document.getElementById('autosave');
 function connectionError(error) {
   const message=error?.message || String(error);
   if (/native messaging host.*not found|host not found/i.test(message))
-    return 'Нет связи с приложением. Установите версию 4.5 и откройте «Браузеры → Восстановить подключение».';
+    return 'Приложение не найдено. Откройте в приложении «Инструменты → Браузеры: подключение и диагностика» и нажмите «Восстановить подключение».';
   return message;
 }
 saveButton.addEventListener('click',async()=>{
@@ -50,6 +50,12 @@ document.getElementById('connect').addEventListener('click',async()=>{
     const response=await chrome.runtime.sendMessage({action:'native_ping'});
     if(!response?.ok)throw Error('Обновите приложение до версии 4.5');
     status.textContent='Приложение подключено · '+response.version;
+    if(typeof document.querySelector==='function'){
+      const version=chrome.runtime.getManifest().version;
+      document.getElementById('connection-details').textContent='Расширение: '+version+' · Приложение: '+response.version+'\n'+
+        (version===response.version?'Версии совпадают. Связь с приложением работает.':'Версии различаются. Обновите приложение и перезагрузите расширение.')+'\n'+
+        (response.supports?.includes('save_credentials')&&response.supports?.includes('get_credentials')?'Сохранение и заполнение поддерживаются.':'Нужна новая версия модуля приложения.');
+    }
   }catch(error){status.textContent=connectionError(error)}
 });
 async function sitePreference(){
@@ -79,3 +85,16 @@ async function sitePreference(){
   });
 }
 sitePreference().catch(()=>{autoSave.disabled=true});
+if(typeof document.querySelector==='function'){
+  document.getElementById('extension-version').textContent=chrome.runtime.getManifest().version;
+  (async()=>{
+    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+    const response=await chrome.runtime.sendMessage({action:'last_result',tabId:tab.id,url:tab.url});
+    const result=response?.result;
+    const panel=document.getElementById('last-result');
+    if(!result){panel.textContent='Здесь появится результат действия на этой вкладке.';return}
+    const time=new Date(result.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    panel.textContent=time+' · '+result.message;
+    panel.dataset.state=result.state;
+  })().catch(()=>{});
+}

@@ -2,10 +2,29 @@
 import json
 import os
 import re
+import struct
+import subprocess
 from pathlib import Path
 from browser_identity import HOST, EXTENSION_ID
 
 BROWSERS=("Google\\Chrome","Yandex\\YandexBrowser","Microsoft\\Edge","Chromium")
+
+def probe_host(host_exe):
+    """A framed ping only: never opens a vault or asks for credentials."""
+    payload=json.dumps({'action':'ping'}).encode('utf-8')
+    completed=subprocess.run([str(host_exe)],input=struct.pack('<I',len(payload))+payload,
+        capture_output=True,timeout=15,check=False,
+        creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    raw=completed.stdout
+    if completed.returncode or len(raw)<4:raise ValueError('Native host did not respond')
+    length=struct.unpack('<I',raw[:4])[0]
+    if not 1<=length<=65536 or len(raw)!=4+length:raise ValueError('Invalid native response')
+    data=json.loads(raw[4:].decode('utf-8'))
+    if not isinstance(data,dict) or data.get('ok') is not True:raise ValueError('Invalid native response')
+    if not isinstance(data.get('supports'),list) or not isinstance(data.get('version'),str):
+        raise ValueError('Invalid native response')
+    return {'version':str(data.get('version','?'))[:32],
+            'save':'save_credentials' in data.get('supports',[]),'fill':'get_credentials' in data.get('supports',[])}
 
 def make_manifest(extension_id,host_exe):
     if not re.fullmatch(r"[a-p]{32}",extension_id):

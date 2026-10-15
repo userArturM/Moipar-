@@ -4,11 +4,140 @@ import os
 import re
 import shlex
 import shutil
+import uuid
+import tempfile
+from contextlib import contextmanager
+from urllib.parse import urlsplit
 from pathlib import Path
 from datetime import datetime
 
 ICONS=('▣','●','◆','★','⌂','▤','✉','⚙')
 COLORS=('#0067d9','#7048bd','#16803c','#b24c00','#c52d46','#67676f')
+
+@contextmanager
+def transaction(vault):
+    if not vault.unlocked:raise ValueError('Vault is locked')
+    vault.sync_from_disk(write=False)
+    before=copy.deepcopy((vault.entries,vault.meta))
+    try:
+        yield
+        vault.save()
+    except Exception:
+        vault.entries,vault.meta=before
+        raise
+
+def preview_backup(path,password,keyfile=None):
+    """Unlock a disposable copy: migration/retention must not alter the backup."""
+    from moi_paroli import Vault
+    with tempfile.TemporaryDirectory() as folder:
+        staged=Path(folder)/'preview.dat'
+        shutil.copyfile(path,staged)
+        probe=Vault(str(staged))
+        try:
+            probe.unlock(password,keyfile)
+            return copy.deepcopy(probe.active())
+        finally:probe.lock()
+
+def restore_selected(vault,records,ids):
+    from moi_paroli import normalize,now_str
+    selected=[e for e in records if e['id'] in set(ids)]
+    if not selected or len(selected)!=len(set(ids)):raise ValueError('Invalid selection')
+    created=[]
+    with transaction(vault):
+        for source in selected:
+            entry=normalize(copy.deepcopy(source))
+            entry['id']=uuid.uuid4().hex
+            entry['deleted']=None
+            entry['mtime']=now_str()
+            vault.entries.append(entry)
+            vault._register_category(entry['category'])
+            created.append(entry['id'])
+    return created
+
+def remove_category(vault,name,trash_entries=False):
+    from moi_paroli import now_str
+    token=uuid.uuid4().hex
+    with transaction(vault):
+        if name not in vault.categories():raise ValueError('Category not found')
+        change={'name':name,'properties':copy.deepcopy(vault.meta.get('category_properties',{}).get(name,{})),
+                'records':[],'mtime':datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),'restored':False}
+        for entry in vault.active():
+            if entry['category']!=name:continue
+            entry['category']=''
+            if trash_entries:entry['deleted']=now_str()
+            vault._touch(entry)
+            change['records'].append({'id':entry['id'],'hash':vault._record_hash(entry),'deleted':trash_entries})
+        vault.meta['categories']=[c for c in vault.meta.get('categories',[]) if c!=name]
+        vault.meta.get('category_properties',{}).pop(name,None)
+        vault.meta.setdefault('category_tombstones',{})[name]=change['mtime']
+        vault.meta.setdefault('category_trash',{})[token]=change
+    return token
+
+def restore_category(vault,token):
+    restored=0
+    with transaction(vault):
+        change=vault.meta.get('category_trash',{}).get(token)
+        if not change or change.get('restored'):raise ValueError('Invalid selection')
+        name=change['name']
+        if name in vault.categories():raise ValueError('Category already exists')
+        props=copy.deepcopy(change['properties'])
+        props['mtime']=datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        vault.meta.setdefault('category_properties',{})[name]=props
+        vault.meta.setdefault('categories',[]).append(name)
+        for saved in change['records']:
+            entry=vault.get(saved['id'])
+            # Do not overwrite edits, moves, restores or permanent deletion since removal.
+            if entry and vault._record_hash(entry)==saved['hash']:
+                entry['category']=name
+                if saved['deleted']:entry['deleted']=None
+                vault._touch(entry);restored+=1
+        change['restored']=True;change['mtime']=props['mtime']
+    return restored
+
+def duplicate_groups(records):
+    groups={}
+    for entry in records:
+        if entry.get('deleted'):continue
+        try:
+            raw=entry.get('url','').strip()
+            parsed=urlsplit(raw if '://' in raw else 'https://'+raw)
+            host=(parsed.hostname or '').lower().rstrip('.')
+            port=parsed.port
+            site=host+(':'+str(port) if port and port not in (80,443) else '')
+        except ValueError:continue
+        login=entry.get('login','').strip()
+        if host and login:groups.setdefault((site,login),[]).append(entry)
+    return [group for group in groups.values() if len(group)>1]
+
+MERGE_FIELDS=('title','url','login','password','totp','category','tags','note','fields')
+
+def merge_duplicates(vault,ids,keep_id,choices,expected):
+    from moi_paroli import now_str,HISTORY_LIMIT
+    ids=list(dict.fromkeys(ids))
+    if len(ids)<2 or keep_id not in ids or any(k not in MERGE_FIELDS or v not in ids for k,v in choices.items()):
+        raise ValueError('Invalid selection')
+    with transaction(vault):
+        entries=[vault.get(i) for i in ids]
+        if any(e is None or e['deleted'] or vault._record_hash(e)!=expected.get(e['id']) for e in entries):
+            raise ValueError('Selection changed')
+        if not any({e['id'] for e in group}>=set(ids) for group in duplicate_groups(entries)):
+            raise ValueError('Invalid selection')
+        selected={e['id']:e for e in entries}
+        keep=selected[keep_id]
+        history=[];attachments=[]
+        for entry in entries:
+            for item in [{'password':entry['password'],'changed':entry['updated']}]+entry['history']:
+                if item.get('password') and not any(h['password']==item['password'] for h in history):history.append(copy.deepcopy(item))
+            for item in entry['attachments']:
+                if item not in attachments:attachments.append(copy.deepcopy(item))
+        for field,source in choices.items():keep[field]=copy.deepcopy(selected[source][field])
+        keep['history']=[h for h in history if h['password']!=keep['password']][:HISTORY_LIMIT]
+        keep['attachments']=attachments
+        keep['favorite']=any(e['favorite'] for e in entries)
+        keep['updated']=now_str();vault._touch(keep);vault._register_category(keep['category'])
+        for entry in entries:
+            if entry['id']!=keep_id:entry['deleted']=now_str();vault._touch(entry)
+    return keep_id
 
 def category_change(vault,name,new_name=None,color=None,icon=None,ids=None):
     if not vault.unlocked:raise ValueError('Vault is locked')
@@ -52,9 +181,12 @@ def matches_query(entry,query,issue_ids=None):
     hay=' '.join(str(entry.get(k,'')) for k in ('title','url','login','category','tags','note')).casefold()
     for token in tokens:
         field,sep,value=token.partition(':');value=value.casefold()
-        if sep and field.casefold() in ('category','cat','категория','tag','тег','is'):
+        if sep and field.casefold() in ('category','cat','категория','tag','тег','is','site','сайт','login','логин','note','заметка'):
             field=field.casefold()
-            if field in ('category','cat','категория'):
+            if field in ('site','сайт','login','логин','note','заметка'):
+                name={'site':'url','сайт':'url','login':'login','логин':'login','note':'note','заметка':'note'}[field]
+                if value not in str(entry.get(name,'')).casefold():return False
+            elif field in ('category','cat','категория'):
                 if value not in entry['category'].casefold():return False
             elif field in ('tag','тег'):
                 if value not in [t.strip().casefold() for t in entry['tags'].split(',')]:return False

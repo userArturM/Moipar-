@@ -2,11 +2,43 @@ importScripts('fill.js');
 const recent=new Map();
 const remembered=new Map();
 const pending=new Map();
+const resultKey=id=>'result:'+id;
+async function rememberResult(message,sender,state,text){
+  if(!trustedPopup(sender)||!Number.isInteger(message.tabId))return;
+  const tab=await chrome.tabs.get(message.tabId).catch(()=>null);
+  if(!tab||tab.url!==message.url)return;
+  // Session-only, per-tab status. Never store credentials, URLs or native error details.
+  if(chrome.storage?.session)await chrome.storage.session.set({[resultKey(tab.id)]:{
+    state,operation:message.action==='manual_save'?'save':'fill',time:Date.now(),message:text}});
+}
+async function lastResult(message,sender){
+  if(!trustedPopup(sender)||!Number.isInteger(message.tabId))throw Error('Запрос разрешён только из окна расширения');
+  const tab=await chrome.tabs.get(message.tabId);
+  if(!tab.active||tab.url!==message.url)throw Error('Вкладка изменилась — запрос отменён.');
+  const data=await chrome.storage.session.get(resultKey(tab.id));
+  const result=data[resultKey(tab.id)];
+  return {ok:true,result:result&&Date.now()-result.time<86400000?result:null};
+}
+chrome.tabs?.onRemoved?.addListener(tabId=>chrome.storage?.session?.remove(resultKey(tabId)));
+chrome.tabs?.onUpdated?.addListener((tabId,change)=>{
+  if(change.url){chrome.storage?.session?.remove(resultKey(tabId));chrome.action.setBadgeText({tabId,text:''})}
+});
+function publicFailure(error){
+  const text=String(error||'');
+  if(/not found|host.*не найден/i.test(text))return 'Приложение не найдено. Восстановите подключение в разделе «Браузеры».';
+  if(/Форма пароля не найдена/.test(text))return 'Форма пароля не найдена';
+  if(/Вкладка изменилась/.test(text))return 'Вкладка изменилась — запрос отменён';
+  if(/нет сохранённых паролей/.test(text))return 'Для сайта нет сохранённых паролей';
+  if(/Отменено пользователем|отменено|отменён/i.test(text))return 'Действие отменено';
+  return 'Нет результата от приложения. Проверьте подключение и повторите действие.';
+}
 function trustedPopup(sender){
   return sender.id===chrome.runtime.id&&sender.url===chrome.runtime.getURL('popup.html');
 }
-function manualStatus(message,sender,ok){
+async function manualStatus(message,sender,ok){
   if(!trustedPopup(sender)||!Number.isInteger(message.tabId))return;
+  const tab=await chrome.tabs.get(message.tabId).catch(()=>null);
+  if(!tab||tab.url!==message.url)return;
   chrome.action.setBadgeText({tabId:message.tabId,text:ok?'✓':'!'});
   chrome.action.setTitle({tabId:message.tabId,title:ok?'Действие выполнено':'Действие отменено или недоступно'});
 }
@@ -32,6 +64,7 @@ async function manualRequest(message,sender){
   pending.set(tab.id,true);
   let reply;
   try{
+    await rememberResult(message,sender,'pending','Ожидается подтверждение в приложении');
     if(message.action==='manual_save'){
       if(!message.credentials||typeof message.credentials.password!=='string')throw Error('Нет данных для сохранения');
       reply=await nativeRequest({action:'save_credentials',url:message.url,credentials:message.credentials});
@@ -52,12 +85,19 @@ async function manualRequest(message,sender){
   }
 }
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
+  if(message?.action==='last_result'){
+    lastResult(message,sender).then(sendResponse).catch(()=>sendResponse({ok:false}));
+    return true;
+  }
   if(['manual_fill','manual_save','native_ping'].includes(message?.action)){
-    manualRequest(message,sender).then(reply=>{
-      manualStatus(message,sender,reply.ok);
+    manualRequest(message,sender).then(async reply=>{
+      if(message.action!=='native_ping')await rememberResult(message,sender,reply.ok?'success':'error',
+        reply.ok?(message.action==='manual_save'?'Пароль сохранён':'Поля заполнены'):publicFailure(reply.error));
+      await manualStatus(message,sender,reply.ok);
       sendResponse(reply);
-    }).catch(error=>{
-      manualStatus(message,sender,false);
+    }).catch(async error=>{
+      if(message.action!=='native_ping')await rememberResult(message,sender,'error',publicFailure(error.message)).catch(()=>{});
+      await manualStatus(message,sender,false).catch(()=>{});
       sendResponse({ok:false,error:error.message});
     });
     return true;
