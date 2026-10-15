@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Мои пароли Pro 4.0 — менеджер личных паролей для Windows.
+Bitora password 4.6.0 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -53,9 +53,9 @@ try:
 except ImportError:  # tkinter нужен только для окна
     tk = ttk = messagebox = simpledialog = filedialog = None
 
-APP_NAME = "Мои пароли"
+APP_NAME = "Bitora password"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.5.5"
+APP_VERSION = "4.6.0"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -883,7 +883,7 @@ class Vault:
 
 
 class Settings:
-    DEFAULTS = {"theme": "light", "idle_minutes": 5, "clipboard_seconds": 30,
+    DEFAULTS = {"theme": "dark", "idle_minutes": 5, "clipboard_seconds": 30,
                 "lock_on_minimize": True, "geometry": "", "lock_on_session_lock": True,
                 "close_to_tray": True, "hotkey_enabled": True, "hotkey": "Ctrl+Alt+P",
                 "protect_capture": False, "autotype_enter": False, "check_updates": False,
@@ -900,6 +900,12 @@ class Settings:
 
     def get(self, key):
         return self.data.get(key, self.DEFAULTS.get(key))
+
+    def apply_midnight_design(self):
+        if self.get("design_version")=="midnight":return False
+        self.data.update(theme="dark",sidebar_collapsed=True,design_version="midnight")
+        self.set("design_version","midnight")
+        return True
 
     def set(self, key, value):
         self.data[key] = value
@@ -1368,14 +1374,14 @@ def start_tray(app):
 FF = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
 
-DARK = {"bg": "#161618", "side": "#202023", "panel": "#252528", "card": "#303034",
-        "fg": "#f5f5f7", "muted": "#a9a9b0", "accent": "#0067d9", "accent_hi": "#409cff",
-        "accent_fg": "#ffffff", "sel": "#173e65", "border": "#3a3a40", "hover": "#36363c",
-        "good": "#74d79a", "warn": "#f2c078", "bad": "#ff9a9f"}
-LIGHT = {"bg": "#f5f5f7", "side": "#ededf0", "panel": "#ffffff", "card": "#f7f7f9",
-         "fg": "#1d1d1f", "muted": "#67676f", "accent": "#0067d9", "accent_hi": "#007aff",
-         "accent_fg": "#ffffff", "sel": "#dfecfc", "border": "#dedee4", "hover": "#e8effa",
-         "good": "#24803e", "warn": "#a05d00", "bad": "#b73843"}
+DARK = {"bg": "#141c27", "side": "#101720", "panel": "#1b2635", "card": "#223044",
+        "fg": "#edf3fc", "muted": "#a5b4c9", "accent": "#a7e0d7", "accent_hi": "#c1eee8",
+        "accent_fg": "#132f2c", "sel": "#24433f", "border": "#334154", "hover": "#29394d",
+        "good": "#8ddcb7", "warn": "#edc58e", "bad": "#ffa6af"}
+LIGHT = {"bg": "#f2f5f8", "side": "#e7edf3", "panel": "#ffffff", "card": "#f1f5f8",
+         "fg": "#1b2a3d", "muted": "#596a7d", "accent": "#23685d", "accent_hi": "#1c594f",
+         "accent_fg": "#ffffff", "sel": "#dceeea", "border": "#d7e0e9", "hover": "#e4edf4",
+         "good": "#247048", "warn": "#8e5800", "bad": "#ab3448"}
 THEMES = {"dark": DARK, "light": LIGHT}
 LEVEL_STYLE = {0: "Bad", 1: "Warn", 2: "Good", 3: "Good"}
 
@@ -1397,7 +1403,7 @@ def dark_titlebar(window, enable=True):
         pass
 
 
-ICON_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAaFklEQVR4nO17eZAc1Znn7+WddfatVuu+kNCBJINAgMThY7hsbGwEszNmPA4b42ODPeyZjdnZCKEJx1yeibn2j92N3XDMGB9YGBuwzIw5hISQhCSD0NG6WlJ3q9V3ddddeb638b3Mqm4BLRCDPbsRvOjsysrKyve++/d93yvgw/Hh+HD8PzzY/ycTCAY8xrZupfPH8Osc2+j52x4T0TsWv/4bjK1bhbJ1q9CEEAr7tcvpnQfNTWugtbzfZ7Ar/8pWRYjHwBjjU9e+kgDubuqY32rpyVA1hM2E8BkMWiRjJgCP6cIwFGbQwjljviKk9HQtYh9ThPC86GlG/Z8HMMZFfBnMEyIULHALtVp//0geeKDWWJUQyjZG2reN/9oYsGWLULdvZyGdd8790YYbPrbmviVLmm/MZtUlpimaFYXpEFwFBAQXjEgUIqRX+iOJRfMJgNMF+iPzkfcJhBxCcPpMyIUJThcAzgU4mJD3hJz7HnMDT5n0PL2nVMCegfP5n+7dtf7wW9f4QTKAbd0q2LZtjNuZb1//yfs/89h117fftWJFGqY6Caeag+eU4bmucD0PQRDGBIXgIUcYhuCcy0MyIxI+CzmXvKL3kll0LaTvkuSJASJiBlMiXjHJDBaGKgATXKQRhG2YmLR5cdJ8tvv1o491d993+EqYwK6E+LUbnvgvt9254dubN6U0eGfCkaHBMJcrsJrrMM/xmB/4CIMARBgRxYkBdM5DJmIJ0vtYH8DAJIFS7GDyO3KQpjBycIzR/YqiCBY7GsYYU1VNMKYIVVUFgyaC0NaEerVSKc1xx4ZKf7DrxU3/8F6ZwN7t81tv3anu2nV7cO2mp/77HZ/a+I1lC3rCsaFzfHQ0r1ZrVQSBBx4GpJoIQl8SIY+GxCOiJeGSNi6FSf9K5RKxBXYiIdWcriuKEqk/ka9E/pVL2yGe1BWBNV4VVYOmafTEwHGbNFW7Qxkf9b+z56XNf3jrrTs1Wvv7ZsCWLT9Wt29/IFx33eNbb7tz42NzZ7/ujgxe1PL5IuOhhyAMwMMwUnHB5TkRUic0kq6QZkDaQOc0YalUQrlSwqqVy+G4AidPHEMqlUAq1RTpfrwsRVHlCechSZykHz0jfo04FTFFUTRih6i5WphIPmhMjIk/3P/K7d+p03DFDNhCX3zywXDR0r/bfMOmG3cvWdrtlfPDWrFQgOc7sWoLyQQpLoDUVZAmEDMiNUfMlFCuslqtYmJyHPPmzsGXv/R5bL75Rux7vR/9Fy7ip08+josXzqGlpQ22nZQEKqom7SYiluR96ahrGzFHmhFFQ6YI1zV5IvV5bXI8uOn1A7+1/3JM0GZiwMqVWwTEA+qSpav+tq21H4VcLysUqvA9J3ZUpJichSERHUa+LHZasadj0T0ClXIZ+fwk2tpa8MjDv4fPffbTsBMpnO+7iH37d2PZshX4461/hp07X8Yvnn0S4xf60NTcRPdI1RchjxhAJiC1iMVeMmLAdGYACuPhJEqlF1k6e8/fA9goabkSDdgSc+yaa7Z/cuW6jmcz2Rf9asVRa9Wy9OxT9i3tmgVBIKbbOT3U932UyyVUqxV0dnbgU5+8E/d/9lNoa+/A4PAYqjUXnufjyad/CddxMau9A9esuw6qZuHFF1/AS8/vwMT4EBIJE6lkCqqmN3xLTHtkATFTICIVIXMBVFQqTtjU+g3dr3Xc/dqrNz43kxZoMxiA/N/S3vaQpvUKp1YStZoniarbekj2HzFBLoWu+b6HWq0qVV3XdaxYsRx33/UJdtcdt4v2tmZM5Mu4ODgCzw9h2zZS6RQy6TQqqgoKn4ff+BW6uubgM5++F/fccy9eeeUV7Hzhn9F7/gR46MC2TViWDU2TcOoS6UfegBhAJ0RnTdSqh0Uqc+8XADxXp+m9aACLHvaVxMfvuO9U26x9cwWfCKs1h1GII3uux3UIDtd1UCoV4QcBbMvCgoULcP2GDdi86UZ2zZqrRSqhw3U9lMpVOF4o7dVO2BgeGcEPvvdT9F3ow+p1H4FlZ+TUZP+pVAZds+ehs6sThA67u7uxb+8rOHJ4P4YunoPrlKFpKlKpFDTdkMyPnGe0fFpbGHg8CDu19jmPXjh3dHD5wIBEjTFtl2XAVoXg5IoVP1o9Z754s6n1FRnbHceJgU100FMmcuNIJi2sW7cO69atxerVq7Bo0UKWSaeIScJxqlJlDV2BZRnQDRPDI2P4yfZf4qmn98PqvAH9PRPI6q/j1tvWYPXaa5HKtELXLOh6kulGAoapwzZ16esLxQIuDvThzJkTOHn8CI4dPQTXKSGdaZJ01d1kPfTWagLtc74lAmfe2oOvrj8ee0l+WRPYsmUV274dMAxtDlBQgqDmBz5TSerk8SU85ZxNTo6LWzbdgEcf/QYMKyHjdxgKVCo1Uam6MA0NyYSOTNqmcC7Onh3BM8/sx7+88CZYZh4+8fBWJFva8IvvTyI3dDN+uuOXOHTwKdx8y2rcsPFWdM7uEgQAi8UaRkfHUK7k4dRKFO5x9YqlWLN6OT53/0P40Q++i8Nv7EIm2xxFn4ZDBMLQCcOwqlu2NhfA8S1btkvaLsuA0dHjko1eWG32gwKpEoJAiYgnsA7Bak5FmKaF3//ilyXfBwYuSps2rQRampukVpBWDg5WsGPHBbFnXw96B8fQMq8DH//So2ia3YrJCWDwQhXV4giSqVY0tz6C0kQ/nvzZa3jx+cex/tpFuH7jeixcvBQpkrASSGlP5CZQqZJzLWJOZyc23nQP3jy8h2C4dJR1EBU5Ro+YgFANSUUwOtrO3nMYRFgzOa8QwhO+Hzk+EYc7z60hnZmFi8MFdIYONE2HZVnSDPfu7cGx4y7O9DooOALJVgvLrluFjSvmQTdV5HJAf6+LwFMQ+qp8pusVEDp5JOwUsgs/g8B1sP+1s9i98xCaW/Zg7vwk5i7IYk5XCqZlwfOqsAwL47kRlMs0fxaOM45EsllCbAmrI00QPHDBNU4J6TsObaYPBPNVHroRjA1FA9CQmgWBL7VCYSpUTYWAiuGRUXznr54BS6/GomtW4CP3LsacBc0wExoqZSCXC1AacuE6CjxHQeAxOFUBIecIEFDyVK3BFaMwDAut7fOhiEVwqkWcOt6PNw6eBw/7sHgZx8d+6wZZCzE0HclUExTVRljz6mG5ESEiZoREy4z1Am1GDYCPkBOhhO8VifII5BBD6JqiWtA0E0EQIJ1J4Bc7DkHpuBYP/9dPw3cA3wMKpQC1EQ+ez+C5DNWaCrcmEPoMPjHAYTJCgHsE4MBFIBftuy64V5RyVBQg05xAumkZHGc2Tp14CR/9aAW2nULoV2ElUjDMJEoFX64tTpki4mV4DIEwYFeuAaHLSANkdheqgoso9FGmRxhA0y1AMRGGrmSIbmTRMX8xhoaAatGlRAYhjwh3PXpFRHzAUCwB3A1gMQfphI98PoAvBHS1ilCQxFRA1cCktpGGVBjnVcFYADvZhOamLNxQQzWswUhkoJsJhFJQcb0hMgOpA5SoXW5oM30QImBROktqPx1qEtjgUDUDum7D98Zl/k9O0BkPUa0C1RrBVgY/AAIfkng6eMhQLAisn+/ivttNGLqFY7c0Y/+BM9h/wEffRR2q4kDqgVApokNwB0K4AnDAOANVApJJG6LGEOg6kskmqJrZAEMxE8QUVL58RqzN+IngpJRxTi/zdpmYyMwuDGUKqmgWvGqEEC1Lh1MOUKtA2jwtJwiA0I+YQOsoFgU+uqqI377DwuNPHMTTO16F65axcGErrv8Ig2WY6D5jwdCjiANBiVYAxjwwhNCYDc1MIZW04XOqDlkSDKlKVESZXm0BMS9+pUhw5QxAQC5UJjdRKkvhn5xMlJiEQQ2qqsPlITzXRzKpwqu6qJYgmUAsIMJJ5SlFJvvvtEewYUUZD31lF37y/b8AdJeyN4An8Im77sP1G9oxOFzFRF6DroWSaMZCKDyEqipQYSJhJ6TPqXrk9JJI2CoCvxxnhPVCS2wF0ilyKIJfuQ9AbAIRQ0kD4uqOTD9V1Gp5eY3AD+H4TFoDCx3UypBOkL7j+0IePAAqpRCL51/As8+N4SdP/G80z85CM2ZJsTnVMbZv314sX/4AZrUNYXjUghpnf8QERVGjiCMSaG3mSCQsaKovNYFGpTwp75FRoFFPiEJhpMF1rbgiBvCoqBEhPyprNfwATVYs5FCuBjLpoeQmm03CVIqoFji41BCanCHwhPT43CkjcEfx5vFR6EkNRmI+oGTBmAZbaxblYo5VvCSyGQ1hkEegmlBVTTJCZRoMzYQRpNDeEcC2yUyqMC0bY5MeSoUJWRlqaL+sLlLkkyyQEW2mocz0gcT9RHRUkoqLlhEDNFVDIT+O4eEKLCspKz52QkNzGijlauCeAr8m4FaE9Py+G8Cp+Rgfz2PW3FaoZidUfZYwk1cJI7EETG2HmVqCZcsXQFN1+F6J9EJmgHUNsPUkDGaga64lGaMpQCqRQn9/DuVyToKxeoo+3WHTewrn0Xj5vTMAwmPkBCnblcnFtDqfourwnCJOdJ+DZWVh6BpM08CieRqKo3kIT5UMCFwiPkToU/lMRd+AjtXLGe787IPwgwxMuwuGPRecdeJ3HnoQG9e3oOdcDlx6flp05MEpyTHVNFSFY97CjNQs01ShKEkcO3IUoV8CU7RGfSwivl5gJWwwcwdJmZF+iGk+IKrc1jUsqs+F6D56AFwkkE4nSCvYyqub4JUnQE7Xd4Q8uBdKDVARoHdkIUYv5vHI59dh7pJlzK2V4FSKWLbqKvbVL6zBKy8fwrHu8zBNBZzCh4xmClSyf2SgGzUsXNwC1wmQTBooVxSc7N4HVZUFkYaWRpJv1AnIHc/oBJUZNYA8MAGJadXdeppJjzUMA2dPv4bxsRo6OlqoSCHWrpmNjDUJJ0rawH2SPpcHDzw4YQfO9M/HwIUxXDjfLRCOAuEwLvQex6kzw3h2x15CndG8FDcj6UGnOO9baO8K0NpOuN+TjrCvP4+LF96ErpuRecqGTLTWurTerW2nzPQBeU7C/XX1J2FEkSUKi7phYzJ3BkeOnsas9nZk00ksXNCGtasYCiM5KEKBCHjMBEqkOEQoMLurHef7xpEfP814mAPEBHKDp9DfP4nZXZ3RXDKURVpHDDC0FJxaFVetVuG5QhZhAB1vHD6PcumcLKNFRdF6IjSVC0RAaGYwpMzMG0IvkfOLuRlVv6IzKIoBhjJ276ZUFLBtHaWyh82bZ8Gr9IEFOkLXhwgoMaf+FsADH3M7OXpOngELc+BhUR6eMyJ6e4dw1VWLEfi+RJFEiMIo4VKg8Aw0I4dV69owOlZAyB0Mj3AcfvMYwAtQVWpCxsuWoTMeJDeZzL2PKEBDOsG6FtTNoJ5wKhoMU8WJ7l9h38ELMmoMDk1iydIWLFtSRGWyCp0cU8jlJDxgSFkcmlrBsSNHYBpCiKAGEdSEprg4fvQIZs9uh65TOJPkAxT+dBtOScXyawLopoGxsbxsxpzoYeg9tx+6roAp6pSu14XW8FsyJF6JE3w5fvWj2B8rgIwCcYYVmRgHlazKxR488/ODqFQC1BwHxWIVd3+yFV6lBwZLUFkG1KCi3L8542NibAD9faehMB++WxS+W4SqeDh14gio8NqUTcmcIWp0MCi8FZo+ges2NeFC/zg8r4ZK1cTBwzlMjr8Gw5S1jlhr6qMeBt9WAnx3BuxqnBGqitVIhsBGVzduUAGqSrU7F7t27sDR42NQFIHh4UksXJjER66bZOVcQcbvCJpqSFo5FMujSCWbkc4sQLJpCUs1LWXZ7GKYhgXKPrPZBCmNxGim3oTyhIqNt3NGFancBFWoyhiamIc3Dj0NxgvQjEQs+EaDNR4RkoyuzOwDtLdeuHUaE6Y8fz2u1kNizGHGYNkpjAwdwFNPvYyvfe3jCEMfg0PjuPOednG+5zTCcAM0+DA1YGJcYHZrEf/5m7+HOXMXsfkLF0mv3997DrnxCxgYGECp5EDXEjJTDCtzsGKlw5asSIhTJ/uRTlvwgtk4fLKCvpP/CCvZHiO9uhzjcCjDZ9w1uqz88XYG1ImnAkg9pES2FOGARqFFTGmBoZfx0vM/xg3XL8HSq1qRGysiEfi4/9/Z+Mf/cxSpzDpwdxJesByvve5AVfPQ9fNQ1bPI516X9T3fD6QZhdyWUFfxF6GtOcTH7jbEkTfPSqRnGi6GJu/Anhf+AmEwCd1Y2JA1tQvlvzgZmooEEtZeuRNUFNmVQiiLAdNMoeEI44a+1IIM8vlTeOKHP0Gh4Mrvj44WoJs1fOb+AKX8aWTsZhhaAlbiWnBsQLl6NUbGunD2nIfBYYaJggWOFlh2GhpfBls18OkHgaPHTmIil4PnTsAVK3HgwEn0nfonJNNdcm6KElLcMfH1UChbRrLlTlJ6fziAR4YfcTN6GydIVByV7eyor6+oBqyEjcOHX8Bzz+6R2J1KZQMDOXTNY7hvS5mV8qckE3TFkJ0d20ogmUghmcogYSdhGQlQpZn5y5HS0/jt3wd6zp3G0OAYFUQgkMXZ3jk4sPNbMO2kbIjQPFQzkw4w6s/G0WDKVCMgfSVQeFf0whDIGmBD6tNM4ZJBcyoMhpEEU1w8t+MJvHHwLAyT0BlwcbDA1qxvwxe/DDjlN2CraaTsNtDOIUWxAGGCMR26nkZYWYE5LUl84WGB3v7T6O8fhm4osvgyUboOr774GHynF3aiNdpH8JaOcf18+pqjOoEaXnkuIFSPqkuXMuASN9uYVoYrytiSTSjXqNX9Qwz2l5BIJiWMnZgIcf1Ny/GtP2pDOnmQ+RWqBc6BaTRJGKuy2QhLV+HG62z87sMCR7uP4kL/CCxTh64pcINr8dqe72Fi5HkkM11QVEXOJyUv6wbRES98SlgcTFVNyhydK2BARwwjlLzgcm9OFEwaOzxi9WpkW9ErSYTS1GSqGSOjR/DE93+IiTEDLe0dwrSzIl/w0DF7Nr7xHxeITZtOI6ieQODY8MuL0Z7qwhe/ZLJb7qhh1+5fYWxsEpquQDc0BOFyHNz/Swz2P4VkZnZUimsAn/qeq7cLSZoraE1SEyfovl0dq8R7KIisrFN0gYcqPY9maxDf2NzVKD3HICR2SGTfyXQzLlx8Bd/7bjO+/h/+BJtvy0LXQ+TzHibzPm66rRkrVxdxcN9xXLvKxsq1NfQO9IqXXuqj7r7sB1J6Xa204dCBFzAytAupTIfsF6haBJCma2BdLSNGRGfUJleUhKoolueUK/3yhu3HxXvQgG3yJrdc6OHCGhZcVai31/i4kWjJrXANXYj8DcFSYoKFVLoF/X0/E3//N3+O/XsCtGQN6CbZo46BgSLzwXHv51rQMb8fz7+0Fye6+2JYS3lFGrkxE6/u3oGR4d1IZdpgGLas+sgdY9PKXlNrkvvrGvA3DDxhmJ2KabX1dncf7JtO27swAII2E+Ryz5QUkdzHw5RQVISEtyNJ13k9jRuNTCzq0JI5UIc3nelgQwOP49vbHsH//B95KIIYY8tMkuBu/0ARhw+fl+12Q1elyltWC3pOjWPP7qdQLHQjlW6T98u+n3RokdTrMZ/gen27Tj17pXM/CHi2aR0UNbsT+F8+bZh6J1ysvAMDsD1uoQqBf+JBO3WFmE6NEFkIoa+wRqXoUtuL9/JITWAyVKWzc1HMP4O//eu78SdbX8C5Mxqasi3Csm2mqSqzbeovqLLDUy4y7N29F68fegZAHqksqb0d2TwudXbRfNOAWiwPWgM1bhS1Wck0rYVbLX2XPtq1a+wdQyHDjEPuE2ALF379oGr0rE82cb9WrqkEdSUOiENiQysk7aSe9QfX8/IITjjVMdQcH52dd2DTLXfiltuWYc7cJJ7+2dMYH51E77k+nD5xCI47jkQqK9tdqkpaF8f5xlJjnBeX6OoOMHJHUc7iutWga8FDRlPzzT9/9YW7PkV7iWmf4xVWhbtpppBz8e+Zv2CP7/QgkcqIcjHPJM6eVn+TxErdjICRfB+7jSit5RK3a4aDsdFfYPsTL2Pf7tVYvXYNhob60HP6KAqFQen8Mk0d0HTCBrEmvaWkc8mmqLhiVd+RRuV/36/yRHq92pS9qTI5OPCfqFPE5B7idx4Mlx1bVGB7OH/+V/9A052/TLUMeYpiqOXiJAv8Wlweq3vF+hEtPCpMxJEiWnFj4Z5XgVMticAnvEpFVoLTaegGtdip2Dld4tOkHj9nCpRNT88ZpcrcTCzH4qXf1Krlwu8cPrDlh+97n+DU2KoB24L587/6p6rm/lEiOyxMW/NrlZrq1CosCKm7O2US9T29U5KbVqppjEh9yZzqfYa6k50u8be1M2Q6PuVwJTQhx8iF8PwwaGq90Vy09Csol6uPHtz1iX/4V+8UnRo/VoEHwnnzHnmEMe+vjGQ+ZSUc2trs+a7PfN9j1J3lPGDTM8jpKtvYJh6PKduNdn5O7YOtx/W3LK0OP2S6F+V81K7knAlN7zBmz7sX7R03jxTy5a+/tvO2p94L8Ve4XT4yh66u312uKMk/BvKf1UwvqWg1CLiyt08eSJbS66YxfTdnjBjk3t8YVV463uLkYm9y6fX6QVHGgq41w7QWI5Ndk09kr/rB+aMv/+nAwH+7+EHvFn8bE+hs1vwvL1KD8G4hvM2MeUvBglYhfJszIZPPyAU0gMrUPCS4eB9DrO5S9FEpQzrPOrKKvx9HflL1CNwGjJmuqmXGTaPjlJWYt8st4+dnznztolzhu9j8B/KLEWAVI5OYfnXp0r8zJyZ6zFQqKRkQBCVFUYx486IXz5OGoriCc3OqcCuizxiL7lUUM/pOymUoXvpeKZvCMOzQ83RvYOCbjV+LRIST1GUd7/JFwH89A6Yz4mUlSp62xxXD3+wgadOutl27iPAr+6lMfbAPcD2/6Z9O/cYZ/uH4cHxw49/ol4Yfjg8H3jL+L4pGCH1Wc05oAAAAAElFTkSuQmCC")
+ICON_B64 = ("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")
 
 
 # ==========================================================================
@@ -2420,6 +2426,7 @@ class App:
         localization.install()
         localization.set_language(self.settings.get("language"))
         self.root.title(tr(APP_NAME))
+        self.settings.apply_midnight_design()
         vp = self.settings.get("vault_path")
         self.vault = Vault(vp if vp else os.path.join(data_dir(), "vault.dat"))
         self.vault.backup_dir = os.path.join(data_dir(), "backups")
@@ -2520,6 +2527,10 @@ class App:
                     bordercolor=t["accent"])
         s.map("Accent.TButton", background=[("active", t["accent_hi"]), ("pressed", t["accent"])],
               bordercolor=[("active", t["accent_hi"])])
+        s.configure("Rail.TButton",background=t["side"],foreground=t["muted"],bordercolor=t["side"],padding=(5,12),anchor="center",font=(FF,scaled_font(9)))
+        s.map("Rail.TButton",background=[("active",t["hover"])],foreground=[("active",t["fg"])])
+        s.configure("RailActive.TButton",background=t["sel"],foreground=t["accent"],bordercolor=t["sel"],padding=(5,12),anchor="center",font=(FF,scaled_font(9)))
+        s.map("RailActive.TButton",background=[("active",t["sel"])],foreground=[("active",t["accent"])])
         s.configure("Ghost.TButton", background=t["side"], foreground=t["fg"], bordercolor=t["side"])
         s.map("Ghost.TButton", background=[("active", t["hover"])], bordercolor=[("active", t["hover"])])
         s.configure("Tool.TMenubutton", background=t["side"], foreground=t["fg"],
@@ -2529,7 +2540,7 @@ class App:
 
         s.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
         s.configure("Treeview", background=t["panel"], fieldbackground=t["panel"],
-                    foreground=t["fg"], rowheight=scaled_font(48), borderwidth=0, relief="flat")
+                    foreground=t["fg"], rowheight=scaled_font(56), borderwidth=0, relief="flat")
         s.map("Treeview", background=[("selected", t["sel"])], foreground=[("selected", t["fg"])])
         s.configure("Treeview.Heading", background=t["side"], foreground=t["muted"],
                     font=(FF, scaled_font(9), "bold"), relief="flat", padding=(8, 8), borderwidth=0)
@@ -2855,7 +2866,7 @@ class App:
         self.vault._sig = self.vault._disk_sig()
         self.settings.set("vault_path", target)
         messagebox.showinfo(
-            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Мои пароли» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
+            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Bitora password» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
 
     def attach_vault(self):
         path = filedialog.askopenfilename(parent=self.root, title=tr('Выберите файл хранилища'),
@@ -2996,7 +3007,7 @@ class App:
         t = self.t
         f = ttk.Frame(self.root)
         self._swap(f)
-        ttk.Label(f, text=tr('◈  Мои пароли'), style="Hero.TLabel").place(x=40, y=32)
+        ttk.Label(f, text=APP_NAME, style="Hero.TLabel").place(x=40, y=32)
         ttk.Label(f, text=tr('Личное пространство для ваших доступов'), style="HeroMuted.TLabel").place(x=42, y=80)
         card = _centered_scroll_card(f,t)
         self.login_card=card
@@ -3204,27 +3215,36 @@ class App:
         f = ttk.Frame(self.root)
         self._swap(f)
 
+        shell=f
+        self.rail=ttk.Frame(shell,style="Side.TFrame",padding=(8,18),width=108)
+        self.rail.pack(side="left",fill="y")
+        if self.logo:ttk.Label(self.rail,image=self.logo,style="Side.TLabel").pack(pady=(0,18))
+        self.rail_buttons={}
+        for value,symbol,label in (("all","▤",tr("Записи")),("fav","★",tr("Избранное")),("trash","⌫",tr("Корзина"))):
+            button=ttk.Button(self.rail,text=symbol+"\n"+label,style="Rail.TButton",width=11,
+                command=lambda selected=value:self.set_library_filter(selected))
+            button.pack(fill="x",pady=4);self.rail_buttons[value]=button
+        ttk.Button(self.rail,text="▦\n"+tr("Категории"),style="Rail.TButton",width=11,command=self.toggle_sidebar).pack(fill="x",pady=4)
+        ttk.Button(self.rail,text="◎\n"+tr("Браузеры"),style="Rail.TButton",width=11,command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=4)
+        ttk.Button(self.rail,text="⚙\n"+tr("Настройки"),style="Rail.TButton",width=11,command=lambda:SettingsDialog(self,self.root)).pack(side="bottom",fill="x",pady=4)
+        f=ttk.Frame(shell);f.pack(side="left",fill="both",expand=True)
         head = ttk.Frame(f, style="Panel.TFrame", padding=(24, 14))
         head.pack(fill="x")
-        ttk.Label(head, text=tr('◈  Мои пароли'), style="Title.TLabel").pack(side="left", padx=(0, 24))
+        ttk.Label(head,text=APP_NAME,style="Title.TLabel").pack(side="left",padx=(0,20))
         menus = ttk.Frame(f, style="Panel.TFrame", padding=(24, 0, 24, 8))
         menus.pack(fill="x")
         for text, menu in ((tr('Файл'), self._file_menu()), (tr('Инструменты'), self._tools_menu()),
                            (tr('Справка'), self._help_menu())):
             ttk.Menubutton(menus, text=tr(text), menu=menu).pack(side="left", padx=3)
-        ttk.Button(head,text=tr("☰ Разделы"),command=self.toggle_sidebar).pack(side="left")
         ttk.Button(head, text=tr('Заблокировать'), command=self.lock).pack(side="right")
-        ttk.Button(head, text=tr('Светлая / тёмная'), command=self.toggle_theme).pack(side="right", padx=8)
+        ttk.Button(head, text=tr('Тема'), command=self.toggle_theme).pack(side="right", padx=8)
 
         hero = ttk.Frame(f, padding=(24, 18))
         hero.pack(fill="x")
         ttk.Button(hero, text=tr('＋  Добавить пароль'), style="Accent.TButton",
                    command=self.add).pack(side="right", pady=8)
-        ttk.Label(hero, text=tr('Ваши пароли'), style="Hero.TLabel").pack(anchor="w")
-        ttk.Label(hero, text=tr('Всё, что нужно для входа. В одном спокойном пространстве.'),
-                  style="HeroMuted.TLabel").pack(anchor="w", pady=(5, 0))
+        ttk.Label(hero, text=tr('Записи'), style="Hero.TLabel").pack(anchor="w")
         overview = ttk.Frame(f, padding=(24, 0))
-        overview.pack(fill="x")
         self._build_stats(overview)
 
         bottom = ttk.Frame(f, style="Side.TFrame", padding=(14, 5))
@@ -3236,16 +3256,16 @@ class App:
 
         self.root.update_idletasks()
         scale = max(1.0, float(self.root.tk.call("tk", "scaling")) / (96/72))
-        compact = self.root.winfo_width() / scale < 1100
+        compact = self.root.winfo_width() / scale < 1000
         body = ttk.Notebook(f) if compact else ttk.PanedWindow(f, orient="horizontal")
         body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
         self.body=body;self.compact=compact;self._sidebar_hidden=False
 
-        side_fr = self.side_panel = ttk.Frame(body, style="Side.TFrame", width=240)
+        side_fr = self.side_panel = ttk.Frame(body, style="Side.TFrame", width=200)
         ttk.Label(side_fr, text=tr('БИБЛИОТЕКА'), style="SideHeading.TLabel").pack(fill="x", padx=12, pady=(20, 7))
         navigation = ttk.Frame(side_fr, style="Side.TFrame")
         self.side = ttk.Treeview(navigation, show="tree", selectmode="browse", style="Side.Treeview")
-        self.side.column("#0", width=225)
+        self.side.column("#0", width=190)
         self.side.tag_configure("head", foreground=t["muted"], font=(FF, 8, "bold"))
         tools = ttk.Frame(side_fr, style="Side.TFrame", padding=12)
         tools.pack(side="bottom", fill="x")
@@ -3267,10 +3287,10 @@ class App:
         else:
             body.add(side_fr, weight=0)
 
-        center = ttk.Frame(body)
+        center = self.center_panel = ttk.Frame(body)
         toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
         toolbar.pack(fill="x")
-        ttk.Label(toolbar, text=tr("Поиск по словам; category:Работа tag:важное is:weak"),
+        ttk.Label(toolbar, text=tr("Поиск по названию, сайту или логину"),
                   style="Muted.TLabel").pack(side="bottom", anchor="w", pady=(8, 0))
         ttk.Label(toolbar, text=tr('Записи'), style="Section.TLabel").pack(side="left", padx=(0, 18))
         self.search = tk.StringVar()
@@ -3285,13 +3305,16 @@ class App:
         self.issue_filter=tk.StringVar(value=tr("Все записи"))
         picker=ttk.Combobox(filter_bar,textvariable=self.issue_filter,values=list(self.issue_choices),state="readonly",width=22)
         picker.pack(side="left");picker.bind("<<ComboboxSelected>>",lambda event:self.refresh_list())
-        ttk.Button(filter_bar,text=tr("Перенести выбранные…"),command=lambda:feature_dialogs.categories(self,move=True)).pack(side="right")
+        self.library_filter=tk.StringVar()
+        self.library_picker=ttk.Combobox(filter_bar,textvariable=self.library_filter,state="readonly",width=24)
+        self.library_picker.pack(side="right",padx=(8,0))
+        self.library_picker.bind("<<ComboboxSelected>>",lambda event:self.set_library_filter(self.library_choices[self.library_filter.get()]))
         lst = ttk.Frame(center, style="Panel.TFrame")
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
         horizontal = ttk.Scrollbar(lst, orient="horizontal")
         horizontal.pack(side="bottom", fill="x")
-        self.tree = ttk.Treeview(lst, columns=cols, show="headings", selectmode="extended")
+        self.tree = ttk.Treeview(lst, columns=cols, displaycolumns=("fav","title","login"), show="headings", selectmode="extended")
         from tkinter import font as tkfont
         column_font = tkfont.Font(family=FF, size=10)
         for key, name, width in self.COLUMNS:
@@ -3320,18 +3343,27 @@ class App:
         else:
             body.add(center, weight=3)
 
-        det = ttk.Frame(body, style="Panel.TFrame", width=400)
-        detail_canvas = tk.Canvas(det, bg=t["panel"], highlightthickness=0, width=400)
+        det = self.detail_panel = ttk.Frame(body, width=400)
+        detail_canvas = self.detail_canvas = tk.Canvas(det, bg=t["bg"], highlightthickness=0, width=400)
         detail_scroll = ttk.Scrollbar(det, orient="vertical", command=detail_canvas.yview)
         detail_scroll.pack(side="right", fill="y")
         detail_canvas.pack(side="left", fill="both", expand=True)
         detail_canvas.configure(yscrollcommand=detail_scroll.set)
-        detail_content = ttk.Frame(detail_canvas, style="Panel.TFrame", padding=20)
-        detail_window = detail_canvas.create_window((0, 0), window=detail_content, anchor="nw")
+        detail_surface=RoundedCard(detail_canvas,t)
+        detail_content = ttk.Frame(detail_surface.body, style="Panel.TFrame", padding=4)
+        detail_content.pack(fill="x")
+        detail_window = detail_canvas.create_window((0, 0), window=detail_surface, anchor="nw")
         detail_canvas.bind("<Configure>", lambda event: detail_canvas.itemconfigure(
             detail_window, width=event.width))
         detail_content.bind("<Configure>", lambda event: detail_canvas.configure(
             scrollregion=detail_canvas.bbox("all")))
+        detail_surface.bind("<Configure>",lambda event:detail_canvas.configure(scrollregion=detail_canvas.bbox("all")))
+        def detail_wheel(event):
+            if str(event.widget).startswith(str(detail_surface)):
+                detail_canvas.yview_scroll(-int(event.delta/120),'units')
+                return 'break'
+        wheel_binding=self.root.bind('<MouseWheel>',detail_wheel,add='+')
+        det.bind('<Destroy>',lambda event:self.root.unbind('<MouseWheel>',wheel_binding) if event.widget is det else None,add='+')
         self._build_details(detail_content)
         if compact:
             body.add(det, text=tr('Подробности'))
@@ -3382,6 +3414,7 @@ class App:
             if self.compact:
                 self.body.insert(0,self.side_panel,text=tr("Разделы"))
                 self.body.tab(self.side_panel,state="normal")
+                self.body.select(self.side_panel)
             else:self.body.insert(0,self.side_panel,weight=0)
         else:
             if self.compact:self.body.hide(self.side_panel)
@@ -3463,6 +3496,7 @@ class App:
         m.add_command(label=tr('Генератор паролей…'),
                       command=lambda: GeneratorDialog(self, self.root))
         m.add_command(label=tr("Категории…"),command=lambda:feature_dialogs.categories(self))
+        m.add_command(label=tr("Перенести выбранные…"),command=lambda:feature_dialogs.categories(self,move=True))
         m.add_command(label=tr("Резервные копии…"),command=lambda:feature_dialogs.backups(self))
         m.add_command(label=tr('Удалить категорию…'), command=self.delete_category)
         m.add_command(label=tr("Корзина категорий"),command=lambda:feature_dialogs.category_trash(self))
@@ -3549,13 +3583,16 @@ class App:
             line.pack(fill="x", pady=(2, 0))
             var = tk.StringVar()
             lbl_style = "Mono.TLabel" if key in ("password", "totp") else "Panel.TLabel"
-            ttk.Label(line, textvariable=var, style=lbl_style, wraplength=190,
-                      justify="left").pack(side="left", fill="x", expand=True)
+            actions=ttk.Frame(line,style="Panel.TFrame")
+            actions.pack(side="right")
             for btn_text, cmd in reversed(btns):
-                b = ttk.Button(line, text=btn_text, command=cmd, width=10, style="Compact.TButton")
+                b = ttk.Button(actions, text=btn_text, command=cmd, style="Compact.TButton")
                 b.pack(side="right", padx=(4, 0))
                 if key == "password" and btn_text == tr('Показать'):
                     self.pw_btn = b
+            label=ttk.Label(line,textvariable=var,style=lbl_style,wraplength=190,justify="left")
+            label.pack(side="left",fill="x",expand=True)
+            line.bind('<Configure>',lambda event,field=label,buttons=actions:field.configure(wraplength=max(80,event.width-buttons.winfo_reqwidth()-8)))
             if key == "password":
                 self.pw_bar = ttk.Progressbar(fr, maximum=100)
                 self.pw_bar.pack(fill="x", pady=(6, 0))
@@ -3746,6 +3783,24 @@ class App:
         if not self.side.exists(self.cat_filter):
             self.cat_filter = "all"
         self.side.selection_set(self.cat_filter)
+        self.refresh_library_controls()
+
+    def set_library_filter(self,value):
+        if not self.side.exists(value):return
+        self.cat_filter=value
+        self.side.selection_set(value)
+        self.refresh_list();self.refresh_library_controls()
+        if self.compact:self.body.select(self.center_panel)
+
+    def refresh_library_controls(self):
+        if not hasattr(self,"library_picker") or not self.library_picker.winfo_exists():return
+        self.library_choices={tr("Все категории"):"all",tr("Избранное"):"fav",tr("Без категории"):"uncat",tr("Корзина"):"trash"}
+        self.library_choices.update({tr("Категория: ")+c:"cat:"+c for c in self.vault.categories()})
+        tags=sorted({tag for entry in self.vault.active() for tag in split_tags(entry["tags"])})
+        self.library_choices.update({tr("Тег: ")+tag:"tag:"+tag for tag in tags})
+        self.library_picker.configure(values=list(self.library_choices))
+        self.library_filter.set(next((label for label,value in self.library_choices.items() if value==self.cat_filter),tr("Все категории")))
+        for value,button in self.rail_buttons.items():button.configure(style="RailActive.TButton" if value==self.cat_filter else "Rail.TButton")
 
     def on_side_select(self, _=None):
         sel = self.side.selection()
@@ -3756,7 +3811,8 @@ class App:
             return
         if sel[0] != self.cat_filter:
             self.cat_filter = sel[0]
-            self.refresh_list()
+            self.refresh_list();self.refresh_library_controls()
+            if self.compact:self.body.select(self.center_panel)
 
     def _in_filter(self, e):
         f = self.cat_filter
@@ -4150,7 +4206,7 @@ def main():
         print(tr('Не найден tkinter. Установите Python с python.org (компонент tcl/tk).'))
         sys.exit(1)
     if not win_single_instance():
-        win_message(tr('«Мои пароли» уже запущены. Найдите значок программы в области уведомлений (трей).'))
+        win_message(tr('«Bitora password» уже запущены. Найдите значок программы в области уведомлений (трей).'))
         sys.exit(0)
     App().run()
 

@@ -16,7 +16,7 @@ def build(folder):
     manifest.pop('key',None)
     assert manifest['manifest_version']==3
     assert set(manifest['permissions'])=={'activeTab','scripting','nativeMessaging','storage'}
-    name=f'MoiParoli-extension-store-{manifest["version"]}.zip'
+    name=f'Bitora-password-extension-store-{manifest["version"]}.zip'
     target=folder/name
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED) as archive:
         for name in FILES:

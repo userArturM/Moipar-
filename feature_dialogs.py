@@ -253,7 +253,7 @@ def updates(app,info):
         url=info.get('download_url') or info['url']
         if '/releases/download/' not in url:
             webbrowser.open(url);return
-        destination=filedialog.asksaveasfilename(parent=window,title=tr('Сохранить установщик'),initialfile='MoiParoli-Setup.exe',defaultextension='.exe')
+        destination=filedialog.asksaveasfilename(parent=window,title=tr('Сохранить установщик'),initialfile='Bitora-password-Setup.exe',defaultextension='.exe')
         if not destination:return
         button.configure(state='disabled');status.config(text=tr('Скачивание…'))
         def worker():

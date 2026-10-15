@@ -45,7 +45,7 @@ def check(repo,current,timeout=8,token=''):
             url=data['html_url']
             notes=data.get('body','') or ''
             assets=data.get('assets') or []
-            setup=next((a for a in assets if a.get('name')=='MoiParoli-Setup.exe'),{})
+            setup=next((a for name in ('Bitora-password-Setup.exe','MoiParoli-Setup.exe') for a in assets if a.get('name')==name),{})
             download_url=setup.get('browser_download_url') or url
             digest=setup.get('digest','') or ''
             sha256=digest.removeprefix('sha256:') if digest.startswith('sha256:') else None

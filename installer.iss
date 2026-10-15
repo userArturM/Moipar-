@@ -1,6 +1,6 @@
-﻿#define MyAppName "Мои пароли"
+﻿#define MyAppName "Bitora password"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.5.5"
+#define MyAppVersion "4.6.0"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}
@@ -17,6 +17,9 @@ OutputBaseFilename=MoiParoli-Setup
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#MyAppExe}
 UninstallDisplayName={#MyAppName}
+VersionInfoDescription=Bitora password
+VersionInfoProductName=Bitora password
+UsePreviousAppDir=yes
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -42,6 +45,10 @@ Source: "register_browser_host.ps1"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
+
+[InstallDelete]
+Type: files; Name: "{autoprograms}\Мои пароли.lnk"
+Type: files; Name: "{autodesktop}\Мои пароли.lnk"
 
 [Run]
 Filename: "{app}\browser_host.exe"; Parameters: "--register"; Flags: runhidden waituntilterminated

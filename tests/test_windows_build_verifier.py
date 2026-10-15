@@ -28,3 +28,4 @@ class BinaryVerifierTests(unittest.TestCase):
             data[0x3c:0x40] = (0xffffffff).to_bytes(4, "little")
             path.write_bytes(data)
             self.assertFalse(is_pe(path))
+

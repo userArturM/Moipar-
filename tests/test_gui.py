@@ -37,6 +37,21 @@ class DesktopTests(unittest.TestCase):
                 self.app.root.after(100, self.close_dialog)
                 cls(self.app, self.app.root)
 
+    def test_midnight_navigation_and_category_picker(self):
+        self.assertEqual(self.app.root.title(),'Bitora password')
+        self.assertEqual(self.app.theme_name,'dark')
+        self.assertTrue(self.app._sidebar_hidden)
+        self.assertEqual(tuple(self.app.tree.cget('displaycolumns')),('fav','title','login'))
+        row=self.app.vault.add({'title':'Work item','category':'Work','password':'FakeOnly!789'})
+        self.app.vault.add({'title':'Other item','category':'Personal','password':'OtherFake!789'})
+        self.app.refresh_all();self.app.set_library_filter('cat:Work')
+        self.assertEqual(self.app.tree.get_children(),(row['id'],))
+        self.assertIn('Work',self.app.library_filter.get())
+        self.app.set_library_filter('all')
+        self.assertEqual(len(self.app.tree.get_children()),2)
+        self.app.root.update()
+        self.assertLess(self.app.rail.winfo_width(),self.app.root.winfo_width()/4)
+
     def test_recovery_dialogs_and_duplicate_choices_open_in_both_languages(self):
         import feature_dialogs
         for title in ('First','Second'):
@@ -76,7 +91,7 @@ class DesktopTests(unittest.TestCase):
     def test_language_switch_and_animation_finish(self):
         self.app.set_language('en')
         self.app.root.update()
-        self.assertEqual(self.app.root.title(),'My Passwords')
+        self.assertEqual(self.app.root.title(),'Bitora password')
         self.assertEqual(self.app.tree.heading('category')['text'],'Category')
         self.app.animate_entry()
         self.app.root.after(350,self.app.root.quit)
@@ -116,10 +131,11 @@ class DesktopTests(unittest.TestCase):
 
     def test_new_feature_dialogs_and_collapsible_sidebar(self):
         import feature_dialogs
+        before=self.app._sidebar_hidden
         self.app.toggle_sidebar()
-        self.assertTrue(self.app._sidebar_hidden)
+        self.assertNotEqual(self.app._sidebar_hidden,before)
         self.app.toggle_sidebar()
-        self.assertFalse(self.app._sidebar_hidden)
+        self.assertEqual(self.app._sidebar_hidden,before)
         for open_dialog in (feature_dialogs.categories,feature_dialogs.backups):
             open_dialog(self.app)
             self.app.root.update()

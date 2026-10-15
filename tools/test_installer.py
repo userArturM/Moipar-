@@ -23,7 +23,10 @@ with tempfile.TemporaryDirectory() as tmp:
     vault.add_attachment(record["id"], "example.txt", b"attachment-must-survive")
     settings = Settings(str(data / "settings.json"))
     settings.set("theme", "light")
-    tracked = [data / "vault.dat", data / "settings.json"]
+    # Opaque fixture: upgrading or renaming must never rewrite Hello credentials.
+    hello=data/'hello_credential.json'
+    hello.write_text('{"version":1,"vault":"synthetic-fixture","encrypted":"opaque-upgrade-sentinel"}',encoding='utf-8')
+    tracked = [data / "vault.dat", data / "settings.json",hello]
     tracked += list((data / "backups").glob("*"))
     before = {str(p.relative_to(data)): p.read_bytes() for p in tracked if p.is_file()}
     previous = Path("previous_release/MoiParoli-Setup.exe")
@@ -69,6 +72,7 @@ with tempfile.TemporaryDirectory() as tmp:
     probe = Vault(str(data / "vault.dat"))
     probe.unlock("UpgradeTestOnly!789")
     assert probe.get(record["id"])["login"] == "test@example.com"
-    assert Settings(str(data / "settings.json")).get("theme") == "light"
+    assert Settings(str(data / "settings.json")).get("theme") == "dark"
+    assert hello.read_bytes()==before['hello_credential.json'], 'Upgrade changed Windows Hello credential data'
     print("Upgrade baseline:", "4.1 installer" if previous.is_file() else "same-version reinstall")
 print("Installer smoke checks passed: install, application startup, uninstall, user data preserved")

@@ -87,9 +87,9 @@ class RecoveryTests(unittest.TestCase):
     def test_native_probe_accepts_only_framed_success(self):
         from browser_registration import probe_host
         import json,struct,subprocess
-        raw=json.dumps({'ok':True,'version':'4.5.5','supports':['save_credentials','get_credentials']}).encode()
+        raw=json.dumps({'ok':True,'version':'4.6.0','supports':['save_credentials','get_credentials']}).encode()
         with patch('browser_registration.subprocess.run',return_value=subprocess.CompletedProcess([],0,struct.pack('<I',len(raw))+raw,b'')) as run:
-            self.assertEqual(probe_host('host.exe'),{'version':'4.5.5','save':True,'fill':True})
+            self.assertEqual(probe_host('host.exe'),{'version':'4.6.0','save':True,'fill':True})
             self.assertIn(b'ping',run.call_args.kwargs['input'])
         with patch('browser_registration.subprocess.run',return_value=subprocess.CompletedProcess([],0,b'broken',b'')):
             with self.assertRaises(ValueError):probe_host('host.exe')
