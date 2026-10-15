@@ -1,3 +1,4 @@
+const bindWorker=require('./browser_test_bridge.cjs');
 const {chromium}=require('playwright');
 const fs=require('fs');
 const assert=require('assert/strict');
@@ -15,6 +16,7 @@ const vm=require('vm');
       const chrome={tabs:{query:async()=>[{id:1,url:page.url()}],get:async()=>({active:true,url:page.url()})},
         runtime:{sendNativeMessage:async()=>({ok:true,login:'chosen@example.test',password:'StoredFake!789'})},
         scripting:{executeScript:async({func,args})=>[{result:await page.evaluate('('+func.toString()+')(...'+JSON.stringify(args)+')')}]}};
+      bindWorker(chrome);
       vm.runInNewContext(fs.readFileSync('browser_extension/popup.js','utf8'),{document:{getElementById:id=>id==='fill'?button:status},chrome,URL});
       await button.handler();
     }

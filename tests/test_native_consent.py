@@ -35,6 +35,7 @@ class NativeConsentTests(unittest.TestCase):
                         walk(child)
                 walk(root)
                 entries[0].insert(0,"Wrong" if mode=="wrong" else "NativeConsentTest!789")
+                if mode=="wrong":root.after(300,root.destroy)
                 root.after(150,choose)
                 next(w for w in root.winfo_children() if isinstance(w,ttk.Button)).invoke()
             def choose():

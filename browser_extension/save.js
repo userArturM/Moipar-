@@ -38,7 +38,7 @@ saveButton.addEventListener('click',async()=>{
     const latest=await chrome.tabs.get(tab.id);
     if(latest.url!==tab.url||!latest.active||read.result.url!==tab.url)throw Error('Вкладка изменилась. Повторите действие.');
     status.textContent='Подтвердите сохранение в окне приложения…';
-    const response=await chrome.runtime.sendNativeMessage('ru.moiparoli.host',{action:'save_credentials',...read.result});
+    const response=await chrome.runtime.sendMessage({action:'manual_save',tabId:tab.id,...read.result});
     read.result.credentials.password='';
     if(!response?.ok)throw Error(response?.error||'Сохранение не выполнено');
     status.textContent=response.message||'Пароль сохранён';
@@ -47,7 +47,7 @@ saveButton.addEventListener('click',async()=>{
 });
 document.getElementById('connect').addEventListener('click',async()=>{
   try {
-    const response=await chrome.runtime.sendNativeMessage('ru.moiparoli.host',{action:'ping'});
+    const response=await chrome.runtime.sendMessage({action:'native_ping'});
     if(!response?.ok)throw Error('Обновите приложение до версии 4.5');
     status.textContent='Приложение подключено · '+response.version;
   }catch(error){status.textContent=connectionError(error)}

@@ -467,5 +467,18 @@
   "Введите название категории длиной 1–80 символов": "Enter a category name containing 1–80 characters",
   "Сначала выберите записи": "Select entries first",
   "Выбранные записи изменились. Выберите их заново.": "Selected entries have changed. Select them again.",
-  "Выберите отдельную папку для резервной копии": "Choose a separate backup folder"
+  "Выберите отдельную папку для резервной копии": "Choose a separate backup folder",
+  "Хранилище:": "Vault:",
+  "Показать мастер-пароль": "Show master password",
+  "Выбрать другое хранилище…": "Choose another vault…",
+  "Проверьте раскладку, Caps Lock и выбранное хранилище.": "Check the keyboard layout, Caps Lock and selected vault.",
+  "Подтвердить через Windows Hello": "Approve with Windows Hello",
+  "Неверный мастер-пароль или ключевой файл. Проверьте раскладку и Caps Lock.": "Incorrect master password or key file. Check the keyboard layout and Caps Lock.",
+  "Для этого хранилища нужен ключевой файл.": "This vault requires a key file.",
+  "Не удалось прочитать хранилище. Проверьте выбранный файл и резервные копии.": "Unable to read the vault. Check the selected file and backups.",
+  "Нет доступа к файлу хранилища или ключевому файлу.": "Unable to access the vault or key file.",
+  "Не удалось выполнить действие. Повторите попытку.": "Unable to complete the action. Please try again.",
+  "Сменить мастер-пароль через Windows Hello…": "Change master password using Windows Hello…",
+  "Сначала откройте хранилище с настроенным Windows Hello.": "First open a vault with Windows Hello already configured.",
+  "Мастер-пароль изменён. Включите Windows Hello заново в настройках.": "Master password changed. Enable Windows Hello again in settings."
 }

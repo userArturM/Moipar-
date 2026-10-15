@@ -1,3 +1,4 @@
+import bindWorker from './browser_test_bridge.cjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -17,6 +18,7 @@ async function scenario(mode){
     }}
   };
   const context={document:{getElementById:id=>nodes[id]},chrome,URL,status:nodes.status};
+  bindWorker(chrome);
   vm.runInNewContext(source,context);
   await new Promise(resolve=>setTimeout(resolve,0));
   await nodes.save.handler();
@@ -38,7 +40,7 @@ async function offer(mode){
     storage:{local:{get:async key=>({[key]:mode!=='disabled'})}},
     permissions:{contains:async()=>mode!=='denied'},
     action:{setBadgeText:()=>{},setTitle:()=>{}}};
-  vm.runInNewContext(fs.readFileSync('browser_extension/background.js','utf8'),{chrome,URL,Date,Map});
+  vm.runInNewContext(fs.readFileSync('browser_extension/background.js','utf8'),{chrome,URL,Date,Map,importScripts:()=>{}});
   const message={action:'offer_save',url:'https://example.test/login',credentials:{login:'test',password:'Fake!789'}};
   await new Promise(resolve=>listener(message,{url:mode==='spoof'?'https://evil.test':'https://example.test/login',
                                             tab:{id:1,url:'https://example.test/login'}},resolve));
@@ -55,7 +57,7 @@ let twoStepListener;
 const twoStepCalls=[];
 const twoStepChrome={runtime:{onMessage:{addListener:fn=>twoStepListener=fn},sendNativeMessage:async(host,message)=>{twoStepCalls.push(structuredClone(message));return {ok:true}}},
   storage:{local:{get:async key=>({[key]:true})}},permissions:{contains:async()=>true},action:{setBadgeText:()=>{},setTitle:()=>{}}};
-vm.runInNewContext(fs.readFileSync('browser_extension/background.js','utf8'),{chrome:twoStepChrome,URL,Date,Map});
+vm.runInNewContext(fs.readFileSync('browser_extension/background.js','utf8'),{chrome:twoStepChrome,URL,Date,Map,importScripts:()=>{}});
 const twoStepSender={url:'https://example.test/password',tab:{id:2,url:'https://example.test/password'}};
 const sendTwoStep=message=>new Promise(resolve=>twoStepListener(message,twoStepSender,resolve));
 await sendTwoStep({action:'remember_login',url:'https://example.test/username',login:'two-step@example.test'});

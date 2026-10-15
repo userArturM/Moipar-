@@ -1,3 +1,4 @@
+import bindWorker from './browser_test_bridge.cjs';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -17,6 +18,7 @@ async function check({url='https://example.com/login', latest=url, ok=true} = {}
     }},
     scripting: {executeScript:async(request)=>{calls.push(['fill',request.args]);return [{result:true}];}}
   };
+  bindWorker(chrome);
   vm.runInNewContext(source, {document:{getElementById:id=>id==='status'?status:button}, chrome, URL});
   await button.handler();
   assert.equal(button.disabled,false);

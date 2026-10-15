@@ -54,7 +54,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.5.1"
+APP_VERSION = "4.5.2"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -424,11 +424,17 @@ class Vault:
         return hmac.compare_digest(self.derive(password, **self.kdf, keyfile=self.keyfile), self.key)
 
     def change_password(self, new_password):
+        if not self.unlocked:raise VaultError('хранилище заблокировано')
         if len(new_password)<MIN_MASTER_LEN: raise ValueError("Master password must contain at least 4 characters")
         self.sync_from_disk(write=False)          # сначала подтянуть чужие правки (старым ключом)
-        self.kdf = self._new_kdf()
-        self.key = self.derive(new_password, **self.kdf, keyfile=self.keyfile)
-        self.save(check_external=False)
+        previous = (self.kdf, self.key)
+        try:
+            self.kdf = self._new_kdf()
+            self.key = self.derive(new_password, **self.kdf, keyfile=self.keyfile)
+            self.save(check_external=False)
+        except Exception:
+            self.kdf, self.key = previous
+            raise
 
     def set_keyfile(self, password, content):
         """Включает (content=bytes) или выключает (None) ключевой файл. Нужен мастер-пароль."""
@@ -2799,6 +2805,7 @@ class App:
         self.vault.lock()
         self.vault.path = path
         self.settings.set("vault_path", path)
+        self.hello = HelloUnlock(path, os.path.join(data_dir(), 'hello_credential.json'))
         self.show_login()
 
     def manage_keyfile(self):
@@ -2932,6 +2939,12 @@ class App:
         pw1 = ttk.Entry(card, show="•", width=34, font=(FF, 11))
         pw1.pack(pady=4, fill="x")
         pw1.focus_set()
+        show_master = tk.BooleanVar(value=False)
+        ttk.Checkbutton(card, text=tr('Показать мастер-пароль'), variable=show_master,
+                        command=lambda: pw1.configure(show='' if show_master.get() else '•')).pack(anchor='w')
+        ttk.Label(card, text=tr('Хранилище:')+'\n'+self.vault.path,
+                  style='Muted.TLabel', wraplength=340).pack(anchor='w', pady=(8, 0))
+        ttk.Button(card, text=tr('Выбрать другое хранилище…'), command=self.attach_vault).pack(anchor='w', pady=6)
         language=tk.StringVar(value="English" if self.settings.get("language")=="en" else "Русский")
         picker=ttk.Combobox(f,textvariable=language,values=("Русский","English"),state="readonly",width=12)
         picker.place(relx=1,x=-40,y=38,anchor="ne")
@@ -3014,7 +3027,8 @@ class App:
                 self._fails += 1
                 if self._fails >= 3:
                     self._next_try = time.time() + min(2 ** (self._fails - 2), 30)
-                err.config(text=tr('Неверный мастер-пароль') + (tr(' или ключевой файл') if needs_kf else ""),
+                err.config(text=tr('Неверный мастер-пароль') + (tr(' или ключевой файл') if needs_kf else "")
+                           + '. '+tr('Проверьте раскладку, Caps Lock и выбранное хранилище.'),
                            foreground=t["bad"])
                 pw1.delete(0, "end")
                 return
@@ -3366,6 +3380,7 @@ class App:
         m.add_command(label=tr('Подключить существующее хранилище…'), command=self.attach_vault)
         m.add_separator()
         m.add_command(label=tr('Сменить мастер-пароль…'), command=self.change_master)
+        m.add_command(label=tr('Сменить мастер-пароль через Windows Hello…'), command=self.change_master_hello)
         m.add_command(label=tr('Ключевой файл…'), command=self.manage_keyfile)
         m.add_separator()
         m.add_command(label=tr('Выход'), command=self.quit_app)
@@ -4004,6 +4019,25 @@ class App:
         if not self.vault.verify_password(old):
             messagebox.showerror(tr(APP_NAME), tr('Неверный мастер-пароль.'), parent=self.root)
             return
+        self._choose_new_master()
+
+    def change_master_hello(self):
+        if not self.vault.unlocked or self.vault.uses_keyfile or not self.hello.enabled():
+            messagebox.showwarning(tr(APP_NAME),tr('Сначала откройте хранилище с настроенным Windows Hello.'),parent=self.root)
+            return
+        from native_auth import request_hello
+        epoch=self._auth_epoch
+        def approved(password):
+            valid=(self._auth_epoch==epoch and self.vault.unlocked and self.vault.verify_password(password))
+            password=None
+            if valid:self._choose_new_master()
+        def failed(text):
+            if self._auth_epoch==epoch:messagebox.showwarning(tr(APP_NAME),text,parent=self.root)
+        request_hello(self.root,self.hello,approved,failed)
+
+    def _choose_new_master(self):
+        epoch=self._auth_epoch
+        vault=self.vault
         p1 = simpledialog.askstring(APP_NAME, tr('Новый мастер-пароль:'), show="•", parent=self.root)
         if not p1:
             return
@@ -4014,9 +4048,14 @@ class App:
                                         parent=self.root):
             messagebox.showwarning(tr(APP_NAME), tr('Пароли не совпадают.'), parent=self.root)
             return
-        ok, _ = self._do(self.vault.change_password, p1)
+        if self._auth_epoch!=epoch or self.vault is not vault or not vault.unlocked:
+            return
+        ok, _ = self._do(vault.change_password, p1)
         if ok:
+            self._auth_epoch+=1
+            self.hello.disable()
             self.notify(tr('Мастер-пароль изменён, хранилище пересохранено.\nСтарые резервные копии в папке backups остались под прежним паролем.'))
+            messagebox.showinfo(tr(APP_NAME),tr('Мастер-пароль изменён. Включите Windows Hello заново в настройках.'),parent=self.root)
 
     def open_data_dir(self):
         d = os.path.dirname(self.vault.path)

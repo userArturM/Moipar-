@@ -1,3 +1,4 @@
+const bindWorker=require('./browser_test_bridge.cjs');
 // Real Chromium DOM tests with synthetic accounts; native consent is stubbed.
 const fs=require('node:fs');
 const vm=require('node:vm');
@@ -23,6 +24,7 @@ const {chromium}=require('playwright');
         runtime:{sendNativeMessage:async()=>scenario==='cancel'?{ok:false,error:'Canceled'}:{ok:true,login:chosen,password:'FakePassword!789'}},
         scripting:{executeScript:async({func,args})=>[{result:await page.evaluate('('+func.toString()+')(...'+JSON.stringify(args)+')')}]}
       };
+      bindWorker(chrome);
       vm.runInNewContext(source,{document:{getElementById:id=>id==='fill'?button:status},chrome,URL});
       await handler();
       const values=await page.locator('input').evaluateAll(nodes=>nodes.map(el=>el.value));
@@ -45,6 +47,7 @@ const {chromium}=require('playwright');
       runtime:{sendNativeMessage:async(host,msg)=>{received=structuredClone(msg);return {ok:true,message:'Saved'}}},
       storage:{local:{get:async()=>({})}}
     };
+    bindWorker(chrome);
     vm.runInNewContext(fs.readFileSync('browser_extension/save.js','utf8'),{
       document:{getElementById:id=>nodes[id]},chrome,URL,status});
     await nodes.save.handler();

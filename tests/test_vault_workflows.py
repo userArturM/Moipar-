@@ -2,9 +2,26 @@ import os
 import json
 import tempfile
 import unittest
-from moi_paroli import Vault, WrongPassword, SyncConflict, parse_csv, export_csv_text
+from unittest.mock import patch
+from pathlib import Path
+from moi_paroli import Vault, VaultError, WrongPassword, SyncConflict, parse_csv, export_csv_text
 
 class VaultWorkflowTests(unittest.TestCase):
+    def test_locked_vault_cannot_replace_master_key(self):
+        before=Path(self.path).read_bytes()
+        self.vault.lock()
+        with self.assertRaises(VaultError):self.vault.change_password('DifferentSynthetic!789')
+        self.assertEqual(Path(self.path).read_bytes(),before)
+
+    def test_failed_master_change_keeps_old_key_and_file_usable(self):
+        before=Path(self.path).read_bytes()
+        with patch.object(self.vault,'save',side_effect=OSError('synthetic disk failure')):
+            with self.assertRaises(OSError):self.vault.change_password('DifferentSynthetic!789')
+        self.assertTrue(self.vault.verify_password('MasterTest!789'))
+        self.assertEqual(Path(self.path).read_bytes(),before)
+        self.vault.lock()
+        self.vault.unlock('MasterTest!789')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
