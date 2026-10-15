@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory() as tmp:
     previous = Path("previous_release/MoiParoli-Setup.exe")
     if previous.is_file():
         subprocess.run([str(previous.resolve()), "/VERYSILENT", "/SUPPRESSMSGBOXES",
-                        "/NORESTART", "/SP-", f"/DIR={app}"], check=True, timeout=120)
+                        "/NORESTART", "/SP-", '/TASKS=desktopicon', f"/DIR={app}"], check=True, timeout=120)
     subprocess.run([str(setup), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                     "/SP-", f"/DIR={app}"], check=True, timeout=120)
     for name in ("MoiParoli.exe", "browser_host.exe", "browser_extension/manifest.json",
@@ -49,11 +49,11 @@ with tempfile.TemporaryDirectory() as tmp:
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
     $shell = New-Object -ComObject WScript.Shell
     $links = @()
-    foreach ($scope in @('Programs','CommonPrograms')) {
+    foreach ($scope in @('Programs','CommonPrograms','DesktopDirectory','CommonDesktopDirectory')) {
         $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora Paswword Manager.lnk'
         if (!(Test-Path -LiteralPath $link)) { continue }
         $shortcut = $shell.CreateShortcut($link)
-        $links += @{target=$shortcut.TargetPath; icon=$shortcut.IconLocation; link=$link}
+        $links += @{target=$shortcut.TargetPath; icon=$shortcut.IconLocation; link=$link; scope=$scope}
     }
     ConvertTo-Json -Compress -InputObject @($links)
     '''
@@ -65,6 +65,8 @@ with tempfile.TemporaryDirectory() as tmp:
     matching=[link for link in links if Path(link['target']).is_file()
               and os.path.samefile(link['target'],app/'MoiParoli.exe')]
     assert matching, f'Installed shortcut target not found: {links!r}; expected {app!s}'
+    if previous.is_file():
+        assert any(link['scope'] in ('DesktopDirectory','CommonDesktopDirectory') for link in matching), 'Upgrade lost the desktop shortcut'
     for link in matching:
         icon_path=link['icon'].rsplit(',',1)[0].strip('"')
         assert os.path.samefile(icon_path,installed_icon), f'Incorrect shortcut icon: {link!r}'

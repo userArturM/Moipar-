@@ -45,7 +45,7 @@ Source: "register_browser_host.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"; Check: ShouldCreateDesktopShortcut
 
 [InstallDelete]
 Type: files; Name: "{autoprograms}\Bitora password.lnk"
@@ -58,6 +58,21 @@ Filename: "{app}\browser_host.exe"; Parameters: "--register"; Flags: runhidden w
 Filename: "{app}\{#MyAppExe}"; Description: "Запустить «{#MyAppName}»"; Flags: nowait postinstall skipifsilent
 
 [Code]
+var
+  HadDesktopShortcut: Boolean;
+
+procedure InitializeWizard;
+begin
+  HadDesktopShortcut := FileExists(ExpandConstant('{autodesktop}\Bitora password.lnk')) or
+    FileExists(ExpandConstant('{autodesktop}\Мои пароли.lnk')) or
+    FileExists(ExpandConstant('{autodesktop}\{#MyAppName}.lnk'));
+end;
+
+function ShouldCreateDesktopShortcut: Boolean;
+begin
+  Result := HadDesktopShortcut or WizardIsTaskSelected('desktopicon');
+end;
+
 procedure SHChangeNotify(wEventId: Integer; uFlags: Cardinal; dwItem1, dwItem2: Integer);
   external 'SHChangeNotify@shell32.dll stdcall';
 
