@@ -23,7 +23,7 @@ int wmain(int argc, wchar_t** argv) {
         auto result = winrt::capture<winrt::Windows::Foundation::IAsyncOperation<UserConsentVerificationResult>>(
             interop, &IUserConsentVerifierInterop::RequestVerificationForWindowAsync,
             owner, reinterpret_cast<HSTRING>(winrt::get_abi(
-                winrt::hstring(L"Разблокировать «Bitora Paswword Manager»")))).get();
+                winrt::hstring(L"Разблокировать «Bitora Password Manager»")))).get();
         if (result == UserConsentVerificationResult::Verified) return 0;
         if (result == UserConsentVerificationResult::Canceled) return 1;
         return 2;

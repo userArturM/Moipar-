@@ -15,7 +15,7 @@ if (Test-Path -LiteralPath $path -PathType Leaf) {
         if ($old.name -eq 'ru.moiparoli.host') { $origins+=@($old.allowed_origins | Where-Object { $_ -cmatch '^chrome-extension://[a-p]{32}/$' }) }
     } catch {}
 }
-$manifest=@{name='ru.moiparoli.host';description='Bitora Paswword Manager browser integration';path=$HostExe;type='stdio';allowed_origins=@($origins | Sort-Object -Unique)} | ConvertTo-Json -Depth 4
+$manifest=@{name='ru.moiparoli.host';description='Bitora Password Manager browser integration';path=$HostExe;type='stdio';allowed_origins=@($origins | Sort-Object -Unique)} | ConvertTo-Json -Depth 4
 [System.IO.File]::WriteAllText($path,$manifest,[System.Text.UTF8Encoding]::new($false))
 foreach ($view in @([Microsoft.Win32.RegistryView]::Registry32,[Microsoft.Win32.RegistryView]::Registry64)) {
     $base=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser,$view)

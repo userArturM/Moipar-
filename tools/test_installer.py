@@ -35,6 +35,19 @@ with tempfile.TemporaryDirectory() as tmp:
     if previous.is_file():
         subprocess.run([str(previous.resolve()), "/VERYSILENT", "/SUPPRESSMSGBOXES",
                         "/NORESTART", "/SP-", '/TASKS=desktopicon', f"/DIR={app}"], check=True, timeout=120)
+    # Simulate the previous misspelled brand. The new installer must retain
+    # the desktop shortcut preference while replacing both legacy links.
+    legacy_shortcuts = r'''
+    $shell = New-Object -ComObject WScript.Shell
+    foreach ($scope in @('Programs','DesktopDirectory')) {
+        $path = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora Paswword Manager.lnk'
+        $shortcut = $shell.CreateShortcut($path)
+        $shortcut.TargetPath = $env:BITORA_UPGRADE_TEST_EXE
+        $shortcut.Save()
+    }
+    '''
+    subprocess.run(['powershell','-NoProfile','-Command',legacy_shortcuts],check=True,timeout=30,
+                   env=dict(os.environ,BITORA_UPGRADE_TEST_EXE=str(app/'MoiParoli.exe')))
     subprocess.run([str(setup), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                     "/SP-", f"/DIR={app}"], check=True, timeout=120)
     for name in ("MoiParoli.exe", "browser_host.exe", "browser_extension/manifest.json",
@@ -50,7 +63,9 @@ with tempfile.TemporaryDirectory() as tmp:
     $shell = New-Object -ComObject WScript.Shell
     $links = @()
     foreach ($scope in @('Programs','CommonPrograms','DesktopDirectory','CommonDesktopDirectory')) {
-        $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora Paswword Manager.lnk'
+        $legacy = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora Paswword Manager.lnk'
+        if (Test-Path -LiteralPath $legacy) { throw 'Legacy misspelled shortcut still exists' }
+        $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora Password Manager.lnk'
         if (!(Test-Path -LiteralPath $link)) { continue }
         $shortcut = $shell.CreateShortcut($link)
         $links += @{target=$shortcut.TargetPath; icon=$shortcut.IconLocation; link=$link; scope=$scope}
@@ -65,8 +80,7 @@ with tempfile.TemporaryDirectory() as tmp:
     matching=[link for link in links if Path(link['target']).is_file()
               and os.path.samefile(link['target'],app/'MoiParoli.exe')]
     assert matching, f'Installed shortcut target not found: {links!r}; expected {app!s}'
-    if previous.is_file():
-        assert any(link['scope'] in ('DesktopDirectory','CommonDesktopDirectory') for link in matching), 'Upgrade lost the desktop shortcut'
+    assert any(link['scope'] in ('DesktopDirectory','CommonDesktopDirectory') for link in matching), 'Upgrade lost the desktop shortcut'
     for link in matching:
         icon_path=link['icon'].rsplit(',',1)[0].strip('"')
         assert os.path.samefile(icon_path,installed_icon), f'Incorrect shortcut icon: {link!r}'

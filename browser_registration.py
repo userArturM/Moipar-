@@ -31,7 +31,7 @@ def make_manifest(extension_id,host_exe):
         raise ValueError("Неверный ID расширения")
     if not os.path.isfile(host_exe) or not host_exe.lower().endswith(".exe"):
         raise ValueError("Не найден browser_host.exe")
-    return {"name":HOST,"description":"Bitora Paswword Manager — заполнение и сохранение",
+    return {"name":HOST,"description":"Bitora Password Manager — заполнение и сохранение",
             "path":os.path.abspath(host_exe),"type":"stdio",
             "allowed_origins":["chrome-extension://"+extension_id+"/"]}
 

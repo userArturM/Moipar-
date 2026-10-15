@@ -1,6 +1,6 @@
-﻿#define MyAppName "Bitora Paswword Manager"
+﻿#define MyAppName "Bitora Password Manager"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.8.1"
+#define MyAppVersion "4.8.2"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}
@@ -17,8 +17,8 @@ OutputBaseFilename=MoiParoli-Setup
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\bitora-{#MyAppVersion}.ico
 UninstallDisplayName={#MyAppName}
-VersionInfoDescription=Bitora Paswword Manager
-VersionInfoProductName=Bitora Paswword Manager
+VersionInfoDescription=Bitora Password Manager
+VersionInfoProductName=Bitora Password Manager
 UsePreviousAppDir=yes
 Compression=lzma2
 SolidCompression=yes
@@ -48,6 +48,8 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"; Check: ShouldCreateDesktopShortcut
 
 [InstallDelete]
+Type: files; Name: "{autoprograms}\Bitora Paswword Manager.lnk"
+Type: files; Name: "{autodesktop}\Bitora Paswword Manager.lnk"
 Type: files; Name: "{autoprograms}\Bitora password.lnk"
 Type: files; Name: "{autodesktop}\Bitora password.lnk"
 Type: files; Name: "{autoprograms}\Мои пароли.lnk"
@@ -63,7 +65,8 @@ var
 
 procedure InitializeWizard;
 begin
-  HadDesktopShortcut := FileExists(ExpandConstant('{autodesktop}\Bitora password.lnk')) or
+  HadDesktopShortcut := FileExists(ExpandConstant('{autodesktop}\Bitora Paswword Manager.lnk')) or
+    FileExists(ExpandConstant('{autodesktop}\Bitora password.lnk')) or
     FileExists(ExpandConstant('{autodesktop}\Мои пароли.lnk')) or
     FileExists(ExpandConstant('{autodesktop}\{#MyAppName}.lnk'));
 end;

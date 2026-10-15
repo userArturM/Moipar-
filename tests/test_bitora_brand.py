@@ -31,11 +31,11 @@ class BitoraBrandTests(unittest.TestCase):
             self.assertEqual(icon.ico.getimage((256,256)).convert('RGBA').tobytes(),brand.convert('RGBA').tobytes())
 
     def test_name_and_stable_storage_browser_identity(self):
-        self.assertEqual(app.APP_NAME,'Bitora Paswword Manager')
+        self.assertEqual(app.APP_NAME,'Bitora Password Manager')
         self.assertEqual(HOST,'ru.moiparoli.host')
         self.assertEqual(EXTENSION_ID,'odddlefcmbmjphfnglidnmdpdlofmfgn')
         manifest=json.loads((ROOT/'browser_extension/manifest.json').read_text(encoding='utf-8'))
-        self.assertEqual(manifest['name'],'Bitora Paswword Manager')
+        self.assertEqual(manifest['name'],'Bitora Password Manager')
         installer=(ROOT/'installer.iss').read_text(encoding='utf-8')
         self.assertIn('AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}',installer)
         self.assertIn('DefaultDirName={autopf}\\MoiParoli',installer)

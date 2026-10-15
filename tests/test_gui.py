@@ -129,7 +129,7 @@ class DesktopTests(unittest.TestCase):
         self.assertFalse(self.app.vault.unlocked)
 
     def test_midnight_navigation_and_category_picker(self):
-        self.assertEqual(self.app.root.title(),'Bitora Paswword Manager')
+        self.assertEqual(self.app.root.title(),'Bitora Password Manager')
         self.assertEqual(self.app.theme_name,'dark')
         self.assertEqual(self.app._sidebar_hidden,self.app.compact)
         self.assertEqual(tuple(self.app.tree.cget('displaycolumns')),('fav','title','login'))
@@ -267,7 +267,7 @@ class DesktopTests(unittest.TestCase):
     def test_language_switch_and_animation_finish(self):
         self.app.set_language('en')
         self.app.root.update()
-        self.assertEqual(self.app.root.title(),'Bitora Paswword Manager')
+        self.assertEqual(self.app.root.title(),'Bitora Password Manager')
         self.assertEqual(self.app.tree.heading('category')['text'],'Category')
         self.app.animate_entry()
         self.app.root.after(350,self.app.root.quit)

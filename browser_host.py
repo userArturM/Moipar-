@@ -119,14 +119,14 @@ def select_record(host):
 
     root = tk.Tk()
     apply_brand_icon(root)
-    root.title(tr('Bitora Paswword Manager — разрешить заполнение'))
+    root.title(tr('Bitora Password Manager — разрешить заполнение'))
     root.geometry('620x580')
     root.resizable(True, True)
     settings = Settings(os.path.join(data_dir(), 'settings.json'))
     from localization import set_language
     set_language(settings.get('language'))
     path = settings.get('vault_path') or os.path.join(data_dir(), 'vault.dat')
-    root.title(tr('Bitora Paswword Manager — разрешить заполнение'))
+    root.title(tr('Bitora Password Manager — разрешить заполнение'))
     appearance = SimpleNamespace(root=root, settings=settings)
     App.apply_theme(appearance)
     result = {'ok': False, 'error': tr('Отменено пользователем')}
@@ -253,12 +253,12 @@ def save_record(host,candidate):
     from moi_paroli import App,Vault,Settings,data_dir,VaultError,_scroll_dialog_body
     root=tk.Tk()
     apply_brand_icon(root)
-    root.title(tr('Bitora Paswword Manager — сохранить пароль'))
+    root.title(tr('Bitora Password Manager — сохранить пароль'))
     settings=Settings(os.path.join(data_dir(),"settings.json"))
     from localization import set_language
     set_language(settings.get("language"))
     path = settings.get('vault_path') or os.path.join(data_dir(), 'vault.dat')
-    root.title(tr("Bitora Paswword Manager — сохранить пароль"))
+    root.title(tr("Bitora Password Manager — сохранить пароль"))
     App.apply_theme(SimpleNamespace(root=root,settings=settings))
     frame=_scroll_dialog_body(root,24)
     ttk.Label(frame,text=tr('Сохранить пароль'),font=("Segoe UI",20,"bold")).pack(anchor="w")
@@ -319,7 +319,7 @@ def save_record(host,candidate):
 
 def handle(msg, selector=select_record, saver=save_record):
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.8.1","supports":["get_credentials","save_credentials"]}
+        return {"ok":True,"version":"4.8.2","supports":["get_credentials","save_credentials"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora Paswword Manager 4.8.1 — менеджер личных паролей для Windows.
+Bitora Password Manager 4.8.2 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -56,9 +56,9 @@ try:
 except ImportError:  # tkinter нужен только для окна
     tk = ttk = messagebox = simpledialog = filedialog = None
 
-APP_NAME = "Bitora Paswword Manager"
+APP_NAME = "Bitora Password Manager"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.8.1"
+APP_VERSION = "4.8.2"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -2933,7 +2933,7 @@ class App:
         self.vault._sig = self.vault._disk_sig()
         self.settings.set("vault_path", target)
         messagebox.showinfo(
-            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Bitora Paswword Manager» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
+            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Bitora Password Manager» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
 
     def attach_vault(self):
         path = filedialog.askopenfilename(parent=self.root, title=tr('Выберите файл хранилища'),
@@ -3297,7 +3297,7 @@ class App:
             ttk.Label(head,image=self.atelier_logo,style="Side.TLabel").pack(side="left",padx=(0,12))
         brand=ttk.Frame(head,style="Side.TFrame");brand.pack(side="left")
         ttk.Label(brand,text="Bitora",style="AtelierBrand.TLabel").pack(anchor="w")
-        if not tight:ttk.Label(brand,text="Paswword Manager",style="SideMuted.TLabel").pack(anchor="w")
+        if not tight:ttk.Label(brand,text="Password Manager",style="SideMuted.TLabel").pack(anchor="w")
         IconButton(head,tr('Заблокировать'),self.lock,dict(t,bg=t['side']),'lock',scale).pack(side='right',padx=(12,0))
         menu=self._menu()
         menu.add_cascade(label=tr("Файл"),menu=self._file_menu())
@@ -4423,7 +4423,7 @@ def main():
         print(tr('Не найден tkinter. Установите Python с python.org (компонент tcl/tk).'))
         sys.exit(1)
     if not win_single_instance():
-        win_message(tr('«Bitora Paswword Manager» уже запущены. Найдите значок программы в области уведомлений (трей).'))
+        win_message(tr('«Bitora Password Manager» уже запущены. Найдите значок программы в области уведомлений (трей).'))
         sys.exit(0)
     App().run()
 
