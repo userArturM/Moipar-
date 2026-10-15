@@ -68,6 +68,7 @@ class DesignButton(tk.Canvas):
         if 'style' in kwargs:self.selected=kwargs.pop('style')=='RailActive.TButton'
         if 'state' in kwargs:self.disabled=kwargs.pop('state')=='disabled'
         if 'text' in kwargs:self.label=kwargs.pop('text')
+        if 'command' in kwargs:self.command=kwargs.pop('command')
         if kwargs:super().configure(**kwargs)
         if hasattr(self,'text_font'):self.draw()
 
@@ -105,6 +106,26 @@ class DesignButton(tk.Canvas):
             self.create_text(start+(25*s if self.icon else 0),h/2,text=label,font=self.text_font,fill=color,anchor='w')
 
 
+def button(parent,text='',command=None,style='',width=None,state='normal',**kwargs):
+    root=parent.winfo_toplevel()
+    palette=getattr(root,'_midnight_palette',None)
+    if palette is None:
+        palette=getattr(parent._root(),'_midnight_palette',None)
+    if palette is None:
+        return ttk.Button(parent,text=text,command=command,style=style,width=width or 0,state=state,**kwargs)
+    scale=max(1.0,float(parent.tk.call('tk','scaling'))/(96/72))
+    font_size=getattr(parent._root(),'_midnight_font_size',10)
+    result=DesignButton(parent,text,command or (lambda:None),palette,
+        kind='primary' if style=='Accent.TButton' else 'secondary',
+        width=max(38,int(width*8*scale)) if width else None,
+        height=36,scale=scale,font_size=font_size)
+    try:background=ttk.Style(parent).lookup(parent.cget('style') or 'TFrame','background')
+    except tk.TclError:background=palette['bg']
+    if background:result.parent_bg=background;result.configure(bg=background)
+    result.configure(state=state,**kwargs)
+    return result
+
+
 class RecordModel(ttk.Treeview):
     """Keep all existing selection, sorting and export behavior behind the view."""
     view=None
@@ -133,7 +154,9 @@ class RecordList(tk.Canvas):
         self.sub_font=tkfont.Font(self,family='Segoe UI',size=max(9,font_size-1))
         self.avatar_font=tkfont.Font(self,family='Segoe UI',size=font_size+3)
         self.bind('<Configure>',lambda e:self.draw())
-        self.bind('<Button-1>',self.select_at);self.bind('<Double-1>',lambda e:edit())
+        self.on_drop=None;self.on_drag_motion=None;self._drag_start=None;self._dragging=False
+        self.bind('<Button-1>',self.press);self.bind('<Double-1>',lambda e:edit())
+        self.bind('<B1-Motion>',self.drag);self.bind('<ButtonRelease-1>',self.release)
         self.bind('<Button-3>',lambda e:self.context_at(e,context))
         self.bind('<MouseWheel>',lambda e:self.scroll(-int(e.delta/120)))
         for key,step in (('Up',-1),('Down',1),('Home','first'),('End','last'),('Prior',-6),('Next',6)):
@@ -190,6 +213,28 @@ class RecordList(tk.Canvas):
     def index_at(self,y):
         index=int(self.canvasy(y)//self.row_height)
         return index if 0<=index<len(self.ids) else None
+
+    def press(self,event):
+        index=self.index_at(event.y)
+        self._drag_start=(event.x_root,event.y_root);self._dragging=False
+        self._click_pending=index is not None and self.ids[index] in self.model.selection() and not(event.state&5)
+        if index is None:self._drag_start=None;return
+        if not self._click_pending:self.select_at(event)
+        self.focus_set()
+        self._drag_ids=list(self.model.selection())
+
+    def drag(self,event):
+        if not self._drag_start:return
+        if abs(event.x_root-self._drag_start[0])+abs(event.y_root-self._drag_start[1])>8*self.scale:
+            self._dragging=True
+            self.configure(cursor='hand2')
+            if self.on_drag_motion:self.on_drag_motion(event.x_root,event.y_root)
+
+    def release(self,event):
+        dragging=self._dragging
+        self._drag_start=None;self._dragging=False;self.configure(cursor='')
+        if dragging and self.on_drop:self.on_drop(self._drag_ids,event.x_root,event.y_root)
+        elif not dragging and getattr(self,'_click_pending',False):self.select_at(event)
 
     def select_at(self,event):
         self.focus_set();index=self.index_at(event.y)

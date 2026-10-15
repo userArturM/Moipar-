@@ -1,11 +1,11 @@
 VSVersionInfo(
-  ffi=FixedFileInfo(filevers=(4,6,2,0),prodvers=(4,6,2,0),mask=0x3f,flags=0x0,OS=0x40004,fileType=0x1,subtype=0x0,date=(0,0)),
+  ffi=FixedFileInfo(filevers=(4,7,0,0),prodvers=(4,7,0,0),mask=0x3f,flags=0x0,OS=0x40004,fileType=0x1,subtype=0x0,date=(0,0)),
   kids=[StringFileInfo([StringTable('040904B0',[
-    StringStruct('FileDescription','Bitora password'),
-    StringStruct('FileVersion','4.6.2'),
+    StringStruct('FileDescription','Bitora Paswword Manager'),
+    StringStruct('FileVersion','4.7.0'),
     StringStruct('InternalName','MoiParoli'),
     StringStruct('OriginalFilename','MoiParoli.exe'),
-    StringStruct('ProductName','Bitora password'),
-    StringStruct('ProductVersion','4.6.2')
+    StringStruct('ProductName','Bitora Paswword Manager'),
+    StringStruct('ProductVersion','4.7.0')
   ])]),VarFileInfo([VarStruct('Translation',[1033,1200])])]
 )

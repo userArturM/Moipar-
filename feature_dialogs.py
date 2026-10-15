@@ -3,6 +3,8 @@ import threading
 import tkinter as tk
 from tkinter import ttk,filedialog,simpledialog,messagebox,colorchooser
 from localization import tr
+from midnight_ui import button as midnight_button
+from midnight_dialogs import messagebox,simpledialog
 from product_features import category_change,backup_info,copy_backup,ICONS,COLORS
 
 def friendly_error(exc):
@@ -35,6 +37,12 @@ def categories(app,selected=None,move=False):
         name.set(current.get());props=app.vault.meta.get('category_properties',{}).get(current.get(),{})
         color.set(props.get('color',COLORS[0]));icon.set(props.get('icon',ICONS[0]))
     picker.bind('<<ComboboxSelected>>',load);load()
+    ordering=ttk.Frame(frame);ordering.pack(fill='x',pady=4)
+    def reorder(offset):
+        app.reorder_category(current.get(),offset)
+        picker.configure(values=app.vault.categories())
+    midnight_button(ordering,text=tr('Выше'),command=lambda:reorder(-1)).pack(side='left',padx=4)
+    midnight_button(ordering,text=tr('Ниже'),command=lambda:reorder(1)).pack(side='left',padx=4)
     ttk.Label(frame,text=tr('Название')).pack(anchor='w')
     ttk.Entry(frame,textvariable=name,width=38).pack(fill='x',pady=6)
     ttk.Label(frame,text=tr('Цвет')).pack(anchor='w')
@@ -54,19 +62,19 @@ def categories(app,selected=None,move=False):
             else:category_change(app.vault,current.get(),new_name=name.get(),color=color.get(),icon=icon.get())
             app.cat_filter='all';app.refresh_all();window.destroy();app.notify(tr('Категория сохранена'))
         except Exception as exc:status.config(text=friendly_error(exc))
-    ttk.Button(frame,text=tr('Создать категорию'),command=lambda:save(True)).pack(fill='x',pady=4)
-    ttk.Button(frame,text=tr('Сохранить изменения'),style='Accent.TButton',command=save).pack(fill='x',pady=4)
+    midnight_button(frame,text=tr('Создать категорию'),command=lambda:save(True)).pack(fill='x',pady=4)
+    midnight_button(frame,text=tr('Сохранить изменения'),style='Accent.TButton',command=save).pack(fill='x',pady=4)
     if move:
         ids=list(app.tree.selection())
         ttk.Label(frame,text=tr('Выбрано записей: ')+str(len(ids))).pack(anchor='w',pady=6)
         def transfer():
             try:
-                category_change(app.vault,name.get(),ids=ids,color=color.get(),icon=icon.get())
-                app.refresh_all();window.destroy();app.notify(tr('Записи перенесены'))
+                app.move_to_category(ids,current.get())
+                window.destroy()
             except Exception as exc:status.config(text=friendly_error(exc))
-        ttk.Button(frame,text=tr('Перенести выбранные записи'),command=transfer,state='normal' if ids else 'disabled').pack(fill='x',pady=4)
-    ttk.Button(frame,text=tr('Удалить категорию'),command=lambda:(window.destroy(),app.delete_category(current.get()))).pack(fill='x',pady=4)
-    ttk.Button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=12)
+        midnight_button(frame,text=tr('Перенести выбранные записи'),command=transfer,state='normal' if ids else 'disabled').pack(fill='x',pady=4)
+    midnight_button(frame,text=tr('Удалить категорию'),command=lambda:(window.destroy(),app.delete_category(current.get()))).pack(fill='x',pady=4)
+    midnight_button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=12)
     window.grab_set()
 
 def backups(app):
@@ -109,11 +117,11 @@ def backups(app):
             app.post(lambda:status.config(text=text) if window.winfo_exists() else None)
         threading.Thread(target=worker,daemon=True).start()
     ttk.Label(frame,text=tr('Локальные копии находятся рядом с хранилищем. Сохраняйте отдельную копию на другом диске.'),wraplength=520).pack(anchor='w',pady=8)
-    ttk.Button(frame,text=tr('Сохранить отдельную копию'),style='Accent.TButton',command=create).pack(fill='x',pady=5)
-    ttk.Button(frame,text=tr('Проверить восстановление'),command=validate).pack(fill='x',pady=5)
-    ttk.Button(frame,text=tr('Просмотреть и восстановить отдельные записи…'),command=lambda:backup_preview(app)).pack(fill='x',pady=5)
-    ttk.Button(frame,text=tr('Восстановить из резервной копии…'),command=lambda:(window.destroy(),app.restore_backup())).pack(fill='x',pady=5)
-    ttk.Button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=12)
+    midnight_button(frame,text=tr('Сохранить отдельную копию'),style='Accent.TButton',command=create).pack(fill='x',pady=5)
+    midnight_button(frame,text=tr('Проверить восстановление'),command=validate).pack(fill='x',pady=5)
+    midnight_button(frame,text=tr('Просмотреть и восстановить отдельные записи…'),command=lambda:backup_preview(app)).pack(fill='x',pady=5)
+    midnight_button(frame,text=tr('Восстановить из резервной копии…'),command=lambda:(window.destroy(),app.restore_backup())).pack(fill='x',pady=5)
+    midnight_button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=12)
     refresh();window.grab_set()
 
 def backup_preview(app):
@@ -151,8 +159,8 @@ def backup_preview(app):
             ids=restore_selected(app.vault,records,listing.selection())
             app.refresh_all();window.destroy();app.notify(tr('Восстановлено записей: ')+str(len(ids)))
         except Exception as exc:status.config(text=friendly_error(exc))
-    ttk.Button(frame,text=tr('Восстановить выбранные записи'),style='Accent.TButton',command=restore).pack(fill='x',pady=6)
-    ttk.Button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=8)
+    midnight_button(frame,text=tr('Восстановить выбранные записи'),style='Accent.TButton',command=restore).pack(fill='x',pady=6)
+    midnight_button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=8)
     window.bind('<Destroy>',lambda event:records.clear() if event.widget is window else None,add='+')
     window.grab_set()
 
@@ -177,8 +185,8 @@ def delete_category(app,name):
         if not app.vault.unlocked:return
         try:restore_category(app.vault,token);app.refresh_all();app.notify(tr('Категория восстановлена'))
         except Exception as exc:messagebox.showerror(tr('Корзина категорий'),friendly_error(exc),parent=app.root)
-    ttk.Button(frame,text=tr('Удалить категорию'),style='Accent.TButton',command=remove).pack(fill='x',pady=8)
-    ttk.Button(frame,text=tr('Отмена'),command=window.destroy).pack(anchor='e',pady=8)
+    midnight_button(frame,text=tr('Удалить категорию'),style='Accent.TButton',command=remove).pack(fill='x',pady=8)
+    midnight_button(frame,text=tr('Отмена'),command=window.destroy).pack(anchor='e',pady=8)
     window.grab_set()
 
 def category_trash(app):
@@ -196,8 +204,8 @@ def category_trash(app):
         try:
             restore_category(app.vault,ids[0]);app.refresh_all();listing.delete(ids[0]);status.config(text=tr('Категория восстановлена'))
         except Exception as exc:status.config(text=friendly_error(exc))
-    ttk.Button(frame,text=tr('Восстановить'),style='Accent.TButton',command=restore).pack(fill='x',pady=5)
-    ttk.Button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=8)
+    midnight_button(frame,text=tr('Восстановить'),style='Accent.TButton',command=restore).pack(fill='x',pady=5)
+    midnight_button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=8)
     window.grab_set()
 
 def duplicates(app):
@@ -234,8 +242,8 @@ def duplicates(app):
             merge_duplicates(app.vault,[e['id'] for e in group],group[0]['id'],choices,state['expected'])
             app.refresh_all();window.destroy();app.notify(tr('Дубли объединены'))
         except Exception as exc:status.config(text=friendly_error(exc))
-    ttk.Button(frame,text=tr('Объединить выбранные версии'),style='Accent.TButton',command=merge).pack(fill='x',pady=5)
-    ttk.Button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=8)
+    midnight_button(frame,text=tr('Объединить выбранные версии'),style='Accent.TButton',command=merge).pack(fill='x',pady=5)
+    midnight_button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=8)
     window.bind('<Destroy>',lambda event:groups.clear() if event.widget is window else None,add='+')
     window.grab_set()
 
@@ -247,7 +255,7 @@ def updates(app,info):
     text=tk.Text(frame,width=64,height=12,wrap='word',relief='flat',bg=app.t['card'],fg=app.t['fg'])
     text.insert('1.0',info.get('notes') or tr('Изменения доступны на странице сборки.'));text.configure(state='disabled');text.pack(fill='both',expand=True,pady=8)
     status=ttk.Label(frame,text='',wraplength=520);status.pack(fill='x',pady=8)
-    button=ttk.Button(frame,text=tr('Скачать установщик'),style='Accent.TButton');button.pack(fill='x',pady=5)
+    button=midnight_button(frame,text=tr('Скачать установщик'),style='Accent.TButton');button.pack(fill='x',pady=5)
     def download():
         import webbrowser
         url=info.get('download_url') or info['url']
@@ -267,6 +275,6 @@ def updates(app,info):
             app.post(finish)
         threading.Thread(target=worker,daemon=True).start()
     button.configure(command=download)
-    ttk.Button(frame,text=tr('Открыть страницу выпуска'),command=lambda:__import__('webbrowser').open(info['url'])).pack(fill='x',pady=4)
-    ttk.Button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=10)
+    midnight_button(frame,text=tr('Открыть страницу выпуска'),command=lambda:__import__('webbrowser').open(info['url'])).pack(fill='x',pady=4)
+    midnight_button(frame,text=tr('Закрыть'),command=window.destroy).pack(anchor='e',pady=10)
     window.grab_set()

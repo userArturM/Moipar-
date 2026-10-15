@@ -1,6 +1,6 @@
-﻿#define MyAppName "Bitora password"
+﻿#define MyAppName "Bitora Paswword Manager"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.6.2"
+#define MyAppVersion "4.7.0"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}
@@ -17,8 +17,8 @@ OutputBaseFilename=MoiParoli-Setup
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\bitora-{#MyAppVersion}.ico
 UninstallDisplayName={#MyAppName}
-VersionInfoDescription=Bitora password
-VersionInfoProductName=Bitora password
+VersionInfoDescription=Bitora Paswword Manager
+VersionInfoProductName=Bitora Paswword Manager
 UsePreviousAppDir=yes
 Compression=lzma2
 SolidCompression=yes
@@ -48,6 +48,8 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"; Tasks: desktopicon
 
 [InstallDelete]
+Type: files; Name: "{autoprograms}\Bitora password.lnk"
+Type: files; Name: "{autodesktop}\Bitora password.lnk"
 Type: files; Name: "{autoprograms}\Мои пароли.lnk"
 Type: files; Name: "{autodesktop}\Мои пароли.lnk"
 

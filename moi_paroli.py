@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora password 4.6.2 — менеджер личных паролей для Windows.
+Bitora Paswword Manager 4.7.0 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -51,12 +51,14 @@ try:
     import tkinter as tk
     from tkinter import ttk, messagebox, simpledialog, filedialog
     from midnight_ui import DesignButton,RecordModel,RecordList,rounded
+    from midnight_ui import button as midnight_button
+    from midnight_dialogs import messagebox,simpledialog
 except ImportError:  # tkinter нужен только для окна
     tk = ttk = messagebox = simpledialog = filedialog = None
 
-APP_NAME = "Bitora password"
+APP_NAME = "Bitora Paswword Manager"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.6.2"
+APP_VERSION = "4.7.0"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -532,6 +534,9 @@ class Vault:
                         if not (e["id"] in tomb and stamp(e) <= tomb[e["id"]])]
         cats = list(r_meta.get("categories") or []) + list(self.meta.get("categories") or [])
         self.meta["categories"] = list(dict.fromkeys(cats))
+        remote_order=r_meta.get('category_order',{})
+        if remote_order.get('mtime','')>self.meta.get('category_order',{}).get('mtime',''):
+            self.meta['category_order']=remote_order
         props=self.meta.setdefault("category_properties",{})
         for name,data in (r_meta.get("category_properties") or {}).items():
             if isinstance(data,dict) and data.get("mtime","")>props.get(name,{}).get("mtime",""):props[name]=data
@@ -686,7 +691,8 @@ class Vault:
 
     def categories(self):
         names = set(self.meta.get("categories", [])) | {e["category"] for e in self.active() if e["category"]}
-        return sorted(names, key=str.lower)
+        order = self.meta.get('category_order',{}).get('names',[])
+        return [name for name in order if name in names] + sorted(names-set(order), key=str.lower)
 
     def delete_category(self, name):
         if not self.unlocked: raise VaultError("Хранилище заблокировано")
@@ -886,7 +892,7 @@ class Vault:
 class Settings:
     DEFAULTS = {"theme": "dark", "idle_minutes": 5, "clipboard_seconds": 30,
                 "lock_on_minimize": True, "geometry": "", "lock_on_session_lock": True,
-                "close_to_tray": True, "hotkey_enabled": True, "hotkey": "Ctrl+Alt+P",
+                "close_to_tray": True, "lock_on_suspend": True, "hotkey_enabled": True, "hotkey": "Ctrl+Alt+P",
                 "protect_capture": False, "autotype_enter": False, "check_updates": False,
                 "font_size": 10, "sidebar_collapsed": False, "external_backup_dir": "", "backup_reminders": True, "backup_reminded": "", "language": "ru", "animations": True, "update_repo": "userArturM/Moipar-", "vault_path": "", "keyfile_path": ""}
 
@@ -1602,9 +1608,9 @@ class BrowserDialog:
                 check()
             except (OSError,ValueError) as exc:
                 status.config(text=tr('Подключение не восстановлено: ')+str(exc))
-        ttk.Button(frame,text=tr('Восстановить подключение'),style="Accent.TButton",command=repair).pack(fill="x")
-        ttk.Button(frame,text=tr('Проверить снова'),command=check).pack(fill="x",pady=(8,0))
-        ttk.Button(frame,text=tr('Закрыть'),command=top.destroy).pack(anchor="e",pady=(16,0))
+        midnight_button(frame,text=tr('Восстановить подключение'),style="Accent.TButton",command=repair).pack(fill="x")
+        midnight_button(frame,text=tr('Проверить снова'),command=check).pack(fill="x",pady=(8,0))
+        midnight_button(frame,text=tr('Закрыть'),command=top.destroy).pack(anchor="e",pady=(16,0))
         check()
         top.bind("<Escape>",lambda event:top.destroy())
         top.grab_set()
@@ -1658,8 +1664,8 @@ class ConflictDialog:
                 render()
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", pady=(20, 0))
-        ttk.Button(buttons, text=tr('Отмена'), command=top.destroy).pack(side="right")
-        save = ttk.Button(buttons, style="Accent.TButton", command=advance)
+        midnight_button(buttons, text=tr('Отмена'), command=top.destroy).pack(side="right")
+        save = midnight_button(buttons, style="Accent.TButton", command=advance)
         save.pack(side="right", padx=8)
         top.bind("<Escape>", lambda event: top.destroy())
         render()
@@ -1696,13 +1702,13 @@ class GeneratorDialog:
 
         btns = ttk.Frame(frm)
         btns.grid(row=9, column=0, columnspan=3, sticky="e", pady=(14, 0))
-        ttk.Button(btns, text=tr('Обновить'), command=self.regen).pack(side="left", padx=4)
-        ttk.Button(btns, text=tr('Копировать'), command=self.copy).pack(side="left", padx=4)
+        midnight_button(btns, text=tr('Обновить'), command=self.regen).pack(side="left", padx=4)
+        midnight_button(btns, text=tr('Копировать'), command=self.copy).pack(side="left", padx=4)
         if select:
-            ttk.Button(btns, text=tr('Использовать'), style="Accent.TButton",
+            midnight_button(btns, text=tr('Использовать'), style="Accent.TButton",
                        command=self.use).pack(side="left", padx=4)
         else:
-            ttk.Button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="left", padx=4)
+            midnight_button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="left", padx=4)
         top.bind("<Escape>", lambda e: top.destroy())
         self.regen()
         top.grab_set()
@@ -1770,7 +1776,7 @@ class EntryDialog:
         self.show_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(frm, text=tr('Показать'), variable=self.show_var,
                         command=self._toggle).grid(row=pw_row, column=2, padx=(8, 0), sticky="w")
-        ttk.Button(frm, text=tr('Генератор…'), command=self._generate).grid(
+        midnight_button(frm, text=tr('Генератор…'), command=self._generate).grid(
             row=pw_row, column=3, padx=(4, 0))
         self.bar = ttk.Progressbar(frm, maximum=100)
         self.bar.grid(row=r, column=1, sticky="we", pady=(0, 2))
@@ -1820,9 +1826,9 @@ class EntryDialog:
 
         btns = ttk.Frame(frm)
         btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(14, 0))
-        ttk.Button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self._ok).pack(
+        midnight_button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self._ok).pack(
             side="left", padx=4)
-        ttk.Button(btns, text=tr('Отмена'), command=top.destroy).pack(side="left")
+        midnight_button(btns, text=tr('Отмена'), command=top.destroy).pack(side="left")
         top.bind("<Escape>", lambda e: top.destroy())
         top.grab_set()
         parent.wait_window(top)
@@ -1931,9 +1937,9 @@ class HistoryDialog:
         self.tree.pack(fill="both", expand=True)
         btns = ttk.Frame(frm)
         btns.pack(fill="x", pady=(10, 0))
-        ttk.Button(btns, text=tr('Показать/скрыть'), command=self._toggle).pack(side="left")
-        ttk.Button(btns, text=tr('Копировать'), command=self._copy).pack(side="left", padx=6)
-        ttk.Button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="right")
+        midnight_button(btns, text=tr('Показать/скрыть'), command=self._toggle).pack(side="left")
+        midnight_button(btns, text=tr('Копировать'), command=self._copy).pack(side="left", padx=6)
+        midnight_button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="right")
         self._fill()
         top.bind("<Escape>", lambda e: top.destroy())
         top.grab_set()
@@ -1957,7 +1963,8 @@ class HistoryDialog:
 
 class SettingsDialog:
     FLAGS = (("lock_on_minimize", tr('Блокировать при сворачивании окна')),
-             ("lock_on_session_lock", tr('Блокировать при блокировке Windows (Win+L)')),
+             ("lock_on_session_lock", tr('Блокировать при блокировке Windows и смене пользователя')),
+             ("lock_on_suspend", tr('Блокировать при сне и пробуждении компьютера')),
              ("close_to_tray", tr('Кнопка ✕ сворачивает в трей, а не закрывает')),
              ("hotkey_enabled", tr('Быстрый поиск по глобальной горячей клавише')),
              ("protect_capture", tr('Скрывать окно от скриншотов и записи экрана')),
@@ -1967,51 +1974,56 @@ class SettingsDialog:
              ("backup_reminders",tr("Напоминать об отдельной резервной копии")))
 
     def __init__(self, app, parent):
-        s = app.settings
-        self.app = app
-        top = self.top = _new_top(app, parent, tr('Настройки'))
-        frm = _scroll_dialog_body(top,20)
-        self.idle = tk.IntVar(value=s.get("idle_minutes"))
-        self.clip = tk.IntVar(value=s.get("clipboard_seconds"))
-        self.hotkey = tk.StringVar(value=s.get("hotkey"))
-        self.repo = tk.StringVar(value=s.get("update_repo") or "userArturM/Moipar-")
-        self.language=tk.StringVar(value="English" if s.get("language")=="en" else tr('Русский'))
-        self.token=tk.StringVar()
-        self.font_size=tk.IntVar(value=s.get("font_size"))
-        self.flags = {k: tk.BooleanVar(value=bool(s.get(k))) for k, _ in self.FLAGS}
-        hello_button = ttk.Button(frm, text=tr('Windows Hello: включить / отключить'),
-                                  command=self._configure_hello)
-        ttk.Label(frm, text=tr('Блокировать через (мин) бездействия')).grid(row=0, column=0, sticky="w", pady=5)
-        ttk.Spinbox(frm, from_=1, to=120, textvariable=self.idle, width=6).grid(row=0, column=1, sticky="w", padx=12)
-        ttk.Label(frm, text=tr('Очищать буфер обмена через (сек)')).grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Spinbox(frm, from_=5, to=300, textvariable=self.clip, width=6).grid(row=1, column=1, sticky="w", padx=12)
-        ttk.Label(frm, text=tr('Горячая клавиша быстрого поиска')).grid(row=2, column=0, sticky="w", pady=5)
-        ttk.Combobox(frm, textvariable=self.hotkey, width=18,
-                     values=("Ctrl+Alt+P", "Ctrl+Alt+Space", "Ctrl+Shift+Space", "Ctrl+Alt+L")).grid(
-            row=2, column=1, sticky="w", padx=12)
-        for i, (key, text) in enumerate(self.FLAGS, start=3):
-            ttk.Checkbutton(frm, text=tr(text), variable=self.flags[key]).grid(
-                row=i, column=0, columnspan=2, sticky="w", pady=2)
-        row = 3 + len(self.FLAGS)
-        ttk.Label(frm, text=tr('Репозиторий GitHub для обновлений')).grid(row=row, column=0, sticky="w", pady=(10, 0))
-        ttk.Entry(frm, textvariable=self.repo, width=24).grid(row=row, column=1, sticky="w", padx=12, pady=(10, 0))
-        ttk.Label(frm, text=tr('например: ivan/moi-paroli'), foreground=app.t["muted"], font=(FF, 8)).grid(
-            row=row + 1, column=1, sticky="w", padx=12)
-        hello_button.grid(row=row + 2, column=0, columnspan=2, sticky="ew", pady=(12, 6))
-        btns = ttk.Frame(frm)
-        ttk.Label(frm,text=tr('Язык / Language')).grid(row=row+3,column=0,sticky="w",pady=8)
-        ttk.Combobox(frm,textvariable=self.language,values=(tr('Русский'),"English"),state="readonly",width=20).grid(row=row+3,column=1)
-        ttk.Label(frm,text=tr('Токен GitHub (приватный репозиторий)')).grid(row=row+4,column=0,sticky="w",pady=8)
-        ttk.Entry(frm,textvariable=self.token,show="•",width=24).grid(row=row+4,column=1)
-        ttk.Label(frm,text=tr('Пустое поле сохраняет прежний токен. Защищён Windows DPAPI.'),wraplength=440).grid(row=row+5,column=0,columnspan=2,sticky="w")
-        ttk.Button(frm,text=tr('Удалить токен'),command=self.clear_token).grid(row=row+6,column=0,sticky="w",pady=8)
-        ttk.Label(frm,text=tr("Размер текста")).grid(row=row+7,column=0,sticky="w",pady=8)
-        ttk.Spinbox(frm,from_=9,to=14,textvariable=self.font_size,width=6).grid(row=row+7,column=1,sticky="w")
-        btns.grid(row=row + 8, column=0, columnspan=2, sticky="e", pady=(14, 0))
-        ttk.Button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self.save).pack(side="left", padx=4)
-        ttk.Button(btns, text=tr('Отмена'), command=top.destroy).pack(side="left")
-        top.grab_set()
-        parent.wait_window(top)
+        s=app.settings;self.app=app
+        top=self.top=_new_top(app,parent,tr('Настройки'))
+        frm=_scroll_dialog_body(top,24)
+        self.idle=tk.IntVar(value=s.get('idle_minutes'))
+        self.clip=tk.IntVar(value=s.get('clipboard_seconds'))
+        self.hotkey=tk.StringVar(value=s.get('hotkey'))
+        self.repo=tk.StringVar(value=s.get('update_repo') or 'userArturM/Moipar-')
+        self.language=tk.StringVar(value='English' if s.get('language')=='en' else tr('Русский'))
+        self.token=tk.StringVar();self.font_size=tk.IntVar(value=s.get('font_size'))
+        self.flags={key:tk.BooleanVar(value=bool(s.get(key))) for key,_ in self.FLAGS}
+        def section(title):
+            card=ttk.LabelFrame(frm,text=tr(title),style='Midnight.TLabelframe',padding=20)
+            card.pack(fill='x',pady=(0,16))
+            return card
+        def label(card,text):
+            ttk.Label(card,text=tr(text),style='Panel.TLabel',wraplength=500).pack(anchor='w',pady=(0,6))
+        security=section('Блокировка и защита')
+        label(security,'Блокировать после бездействия в приложении (минуты)')
+        ttk.Spinbox(security,from_=1,to=120,textvariable=self.idle,width=8).pack(anchor='w',pady=(0,8))
+        label(security,'Отсчёт начинается после последнего действия в Bitora. Допустимо от 1 до 120 минут.')
+        label(security,'Очищать буфер обмена через (сек)')
+        ttk.Spinbox(security,from_=5,to=300,textvariable=self.clip,width=8).pack(anchor='w',pady=(0,8))
+        for key,text in self.FLAGS:
+            if key in ('lock_on_minimize','lock_on_session_lock','lock_on_suspend','protect_capture'):
+                ttk.Checkbutton(security,text=tr(text),variable=self.flags[key]).pack(anchor='w',pady=4)
+        label(security,'После сна и смены пользователя требуется повторный вход. Открытые окна записей закрываются.')
+        midnight_button(security,text=tr('Windows Hello: включить / отключить'),command=self._configure_hello).pack(fill='x',pady=(10,0))
+        interface=section('Интерфейс и поведение')
+        label(interface,'Язык / Language')
+        ttk.Combobox(interface,textvariable=self.language,values=(tr('Русский'),'English'),state='readonly',width=28).pack(anchor='w',pady=(0,12))
+        label(interface,'Размер текста')
+        ttk.Spinbox(interface,from_=9,to=14,textvariable=self.font_size,width=8).pack(anchor='w',pady=(0,12))
+        for key,text in self.FLAGS:
+            if key not in ('lock_on_minimize','lock_on_session_lock','lock_on_suspend','protect_capture','check_updates'):
+                ttk.Checkbutton(interface,text=tr(text),variable=self.flags[key]).pack(anchor='w',pady=4)
+        label(interface,'Горячая клавиша быстрого поиска')
+        ttk.Combobox(interface,textvariable=self.hotkey,width=28,
+            values=('Ctrl+Alt+P','Ctrl+Alt+Space','Ctrl+Shift+Space','Ctrl+Alt+L')).pack(anchor='w')
+        updates=section('Обновления')
+        ttk.Checkbutton(updates,text=tr('Проверять обновления при запуске'),variable=self.flags['check_updates']).pack(anchor='w',pady=6)
+        label(updates,'Репозиторий GitHub для обновлений')
+        ttk.Entry(updates,textvariable=self.repo,width=45).pack(fill='x',pady=(0,12))
+        label(updates,'Токен GitHub (приватный репозиторий)')
+        ttk.Entry(updates,textvariable=self.token,show='•',width=45).pack(fill='x',pady=(0,8))
+        label(updates,'Пустое поле сохраняет прежний токен. Защищён Windows DPAPI.')
+        midnight_button(updates,text=tr('Удалить токен'),command=self.clear_token).pack(anchor='w')
+        buttons=ttk.Frame(frm);buttons.pack(fill='x',pady=8)
+        midnight_button(buttons,text=tr('Сохранить'),style='Accent.TButton',command=self.save).pack(side='left',padx=(0,8))
+        midnight_button(buttons,text=tr('Отмена'),command=top.destroy).pack(side='left')
+        top.grab_set();parent.wait_window(top)
 
     def clear_token(self):
         from github_updates import save_token
@@ -2030,9 +2042,10 @@ class SettingsDialog:
     def save(self):
         s = self.app.settings
         try:
-            idle, clip = max(1, int(self.idle.get())), max(5, int(self.clip.get()))
+            idle, clip = int(self.idle.get()), int(self.clip.get())
+            if not 1 <= idle <= 120 or not 5 <= clip <= 300: raise ValueError()
         except Exception:
-            messagebox.showwarning(tr(APP_NAME), tr('Введите числа.'), parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), tr('Блокировка: от 1 до 120 минут. Буфер обмена: от 5 до 300 секунд.'), parent=self.top)
             return
         hk = self.hotkey.get().strip()
         try:
@@ -2081,10 +2094,10 @@ class AttachmentsDialog:
                   foreground=app.t["muted"]).pack(anchor="w", pady=(6, 0))
         btns = ttk.Frame(frm)
         btns.pack(fill="x", pady=(10, 0))
-        ttk.Button(btns, text=tr('Добавить…'), style="Accent.TButton", command=self.add).pack(side="left")
-        ttk.Button(btns, text=tr('Сохранить как…'), command=self.save_as).pack(side="left", padx=6)
-        ttk.Button(btns, text=tr('Удалить'), command=self.remove).pack(side="left")
-        ttk.Button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="right")
+        midnight_button(btns, text=tr('Добавить…'), style="Accent.TButton", command=self.add).pack(side="left")
+        midnight_button(btns, text=tr('Сохранить как…'), command=self.save_as).pack(side="left", padx=6)
+        midnight_button(btns, text=tr('Удалить'), command=self.remove).pack(side="left")
+        midnight_button(btns, text=tr('Закрыть'), command=top.destroy).pack(side="right")
         self._fill()
         top.bind("<Escape>", lambda ev: top.destroy())
         top.grab_set()
@@ -2211,7 +2224,7 @@ class BreachDialog:
         bad = [(e, res.get(e["password"], 0)) for e in self.entries if res.get(e["password"], 0) > 0]
         if not bad:
             self.lbl.config(text=tr('Ваших паролей в известных утечках не найдено 👍'))
-            ttk.Button(self.frm, text=tr('Закрыть'), command=self._close).pack(anchor="e", pady=(12, 0))
+            midnight_button(self.frm, text=tr('Закрыть'), command=self._close).pack(anchor="e", pady=(12, 0))
             return
         self.lbl.config(text=f"{tr('Найдено в утечках: ')}{len(bad)}{tr('. Смените эти пароли.')}")
         tree = ttk.Treeview(self.frm, columns=("title", "login", "n"), show="headings", height=12)
@@ -2247,12 +2260,12 @@ class KeyfileDialog:
             tr('Ключевой файл — второй «ключ» к хранилищу. Для входа понадобятся и мастер-пароль, и этот файл (его удобно держать на флешке). Украв пароль или файл по отдельности, хранилище не открыть.\n\nВНИМАНИЕ: если потерять ключевой файл, данные восстановить невозможно, в том числе из резервных копий. Сразу сделайте копию файла в надёжном месте.'))
                   ).pack(anchor="w", pady=12)
         if v.uses_keyfile:
-            ttk.Button(frm, text=tr('Выключить ключевой файл'), command=self.disable).pack(fill="x", pady=3)
+            midnight_button(frm, text=tr('Выключить ключевой файл'), command=self.disable).pack(fill="x", pady=3)
         else:
-            ttk.Button(frm, text=tr('Создать новый ключевой файл и включить…'), style="Accent.TButton",
+            midnight_button(frm, text=tr('Создать новый ключевой файл и включить…'), style="Accent.TButton",
                        command=self.create).pack(fill="x", pady=3)
-            ttk.Button(frm, text=tr('Включить с уже имеющимся файлом…'), command=self.existing).pack(fill="x", pady=3)
-        ttk.Button(frm, text=tr('Закрыть'), command=top.destroy).pack(fill="x", pady=(10, 0))
+            midnight_button(frm, text=tr('Включить с уже имеющимся файлом…'), command=self.existing).pack(fill="x", pady=3)
+        midnight_button(frm, text=tr('Закрыть'), command=top.destroy).pack(fill="x", pady=(10, 0))
         top.grab_set()
         parent.wait_window(top)
 
@@ -2423,6 +2436,7 @@ class App:
         from windows_branding import set_shell_identity
         set_shell_identity()
         self.root = tk.Tk()
+        self.root._bitora_app=self
         self.root.title(APP_NAME)
         self.settings = Settings(os.path.join(data_dir(), "settings.json"))
         import localization
@@ -2452,7 +2466,9 @@ class App:
         except tk.TclError:
             pass
         self.frame = None
-        self.last_activity = time.time()
+        self.last_activity = time.monotonic()
+        self._watch_clock = (time.monotonic(),time.time())
+        self._undo_actions = []
         self._animation_id = None
         self.cat_filter = "all"
         self.sort = ("title", False)
@@ -2483,6 +2499,8 @@ class App:
         name = self.settings.get("theme")
         self.theme_name = name if name in THEMES else "dark"
         t = self.t = THEMES[self.theme_name]
+        self.root._midnight_palette=t
+        self.root._midnight_font_size=font_size
         s = self.style = ttk.Style(self.root)
         try:
             s.theme_use("clam")
@@ -2500,6 +2518,8 @@ class App:
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
                     troughcolor=t["border"], focuscolor=t["accent"], font=(FF, scaled_font(10)))
         s.configure("TFrame", background=t["bg"])
+        s.configure('Midnight.TLabelframe',background=t['panel'],bordercolor=t['border'],relief='solid',borderwidth=1)
+        s.configure('Midnight.TLabelframe.Label',background=t['panel'],foreground=t['accent'],font=(FF,scaled_font(11),'bold'))
         s.configure("Eyebrow.TLabel",background=t["bg"],foreground=t["muted"],font=(FF,scaled_font(9)))
         s.configure("Header.TMenubutton",background=t["panel"],foreground=t["muted"],padding=(6,5),borderwidth=0,relief="flat",arrowcolor=t["muted"])
         s.map("Header.TMenubutton",background=[("active",t["hover"])])
@@ -2527,6 +2547,7 @@ class App:
         s.configure("Big.TLabel", background=t["card"], foreground=t["fg"], font=(FF, scaled_font(24), "bold"))
         s.configure("Brand.TLabel", background=t["side"], foreground=t["fg"], font=(FF, scaled_font(15), "bold"))
         s.configure("Hero.TLabel", background=t["bg"], foreground=t["fg"], font=(FF, scaled_font(22), "bold"))
+        s.configure('LoginBrand.TLabel',background=t['bg'],foreground=t['fg'],font=(FF,scaled_font(16),'bold'))
         s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, scaled_font(10)))
         s.configure("SideHeading.TLabel", background=t["side"], foreground=t["muted"], font=(FF, scaled_font(9), "bold"))
         s.configure("Mono.TLabel", background=t["panel"], foreground=t["fg"], font=(MONO, 11))
@@ -2603,11 +2624,12 @@ class App:
 
     # ---------------- общее
     def _touch(self, _=None):
-        self.last_activity = time.time()
+        self.last_activity = time.monotonic()
 
     def _idle_tick(self):
-        limit = int(self.settings.get("idle_minutes")) * 60
-        if self.vault.unlocked and time.time() - self.last_activity > limit:
+        from session_guard import idle_seconds
+        limit = idle_seconds(self.settings.get("idle_minutes"))
+        if self.vault.unlocked and time.monotonic() - self.last_activity >= limit:
             self.lock()
         self.root.after(5000, self._idle_tick)
 
@@ -2653,10 +2675,19 @@ class App:
             pass
         self.root.after(150, self._pump)
 
+    def _session_event(self,reason):
+        key='lock_on_suspend' if reason=='suspend' else 'lock_on_session_lock'
+        if self.vault.unlocked and self.settings.get(key):self.lock()
+
     def _watch_tick(self):
+        clock=(time.monotonic(),time.time())
+        previous=getattr(self,'_watch_clock',clock)
+        self._watch_clock=clock
         try:
             if self.vault.unlocked:
-                if self.settings.get("lock_on_session_lock") and win_session_locked():
+                if self.settings.get('lock_on_suspend') and max(clock[0]-previous[0],clock[1]-previous[1])>15:
+                    self.lock()
+                elif self.settings.get("lock_on_session_lock") and win_session_locked():
                     self.lock()
                 elif time.time() - self._sync_at > 10:
                     self._sync_at = time.time()
@@ -2689,6 +2720,9 @@ class App:
             self.set_status(tr('↻ Подтянуты изменения с другого устройства'), self.t["warn"])
 
     def _start_services(self):
+        from session_guard import SessionGuard
+        self.session_guard=SessionGuard(lambda reason:self.post(lambda:self._session_event(reason)))
+        self.session_guard.start()
         self.tray = start_tray(self)
         self.restart_hotkey()
 
@@ -2742,6 +2776,7 @@ class App:
         self.root.withdraw()
 
     def quit_app(self):
+        if getattr(self,'session_guard',None):self.session_guard.stop()
         try:
             if self.root.state() == "normal":
                 self.settings.set("geometry", self.root.geometry())
@@ -2880,7 +2915,7 @@ class App:
         self.vault._sig = self.vault._disk_sig()
         self.settings.set("vault_path", target)
         messagebox.showinfo(
-            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Bitora password» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
+            tr(APP_NAME), tr('Хранилище перенесено в выбранную папку и теперь синхронизируется вашим облаком.\n\nНа втором компьютере установите «Bitora Paswword Manager» и выберите Файл → «Подключить существующее хранилище…». Правки с обоих компьютеров объединяются автоматически.\nПрежний локальный файл остался на месте как резервная копия.'), parent=self.root)
 
     def attach_vault(self):
         path = filedialog.askopenfilename(parent=self.root, title=tr('Выберите файл хранилища'),
@@ -2929,7 +2964,7 @@ class App:
             shown = f["value"] if (not f.get("secret") or self.pw_visible) else "•" * 8
             ttk.Label(line, text=shown, style="Mono.TLabel" if f.get("secret") else "Panel.TLabel",
                       wraplength=190, justify="left").pack(side="left", fill="x", expand=True)
-            ttk.Button(line, text=tr('Копировать'), width=11,
+            midnight_button(line, text=tr('Копировать'), width=11,
                        command=lambda v=f["value"], n=f["name"]: self.copy_text(v, n)).pack(side="right")
 
     def _guard(self, fn):
@@ -2949,6 +2984,9 @@ class App:
         except (OSError, VaultError) as ex:
             messagebox.showerror(tr(APP_NAME), f"{tr('Не удалось сохранить данные:\n')}{ex}", parent=self.root)
             return False, None
+        except ValueError as ex:
+            messagebox.showwarning(tr(APP_NAME),feature_dialogs.friendly_error(ex),parent=self.root)
+            return False,None
         self._after_merge()
         return True, res
 
@@ -2998,6 +3036,7 @@ class App:
             pass
 
     def lock(self):
+        self._undo_actions=[]
         for w in self.root.winfo_children():
             if w.winfo_class() == "Toplevel":
                 w.destroy()
@@ -3021,7 +3060,7 @@ class App:
         t = self.t
         f = ttk.Frame(self.root)
         self._swap(f)
-        ttk.Label(f, text=APP_NAME, style="Hero.TLabel").place(x=40, y=32)
+        ttk.Label(f, text=APP_NAME, style="LoginBrand.TLabel").place(x=40, y=32)
         ttk.Label(f, text=tr('Личное пространство для ваших доступов'), style="HeroMuted.TLabel").place(x=42, y=80)
         card = _centered_scroll_card(f,t)
         self.login_card=card
@@ -3040,7 +3079,7 @@ class App:
                         command=lambda: pw1.configure(show='' if show_master.get() else '•')).pack(anchor='w')
         ttk.Label(card, text=tr('Хранилище:')+'\n'+self.vault.path,
                   style='Muted.TLabel', wraplength=340).pack(anchor='w', pady=(8, 0))
-        ttk.Button(card, text=tr('Выбрать другое хранилище…'), command=self.attach_vault).pack(anchor='w', pady=6)
+        midnight_button(card, text=tr('Выбрать другое хранилище…'), command=self.attach_vault).pack(anchor='w', pady=6)
         language=tk.StringVar(value="English" if self.settings.get("language")=="en" else "Русский")
         picker=ttk.Combobox(f,textvariable=language,values=("Русский","English"),state="readonly",width=12)
         picker.place(relx=1,x=-40,y=38,anchor="ne")
@@ -3077,7 +3116,7 @@ class App:
                 if p:
                     kf["path"] = p
                     kf_lbl.config(text=os.path.basename(p))
-            ttk.Button(kf_row, text=tr('Ключевой файл…'), command=pick_kf).pack(side="right")
+            midnight_button(kf_row, text=tr('Ключевой файл…'), command=pick_kf).pack(side="right")
         if new and self.settings.get("vault_path"):
             ttk.Label(card, style="Muted.TLabel", wraplength=300, foreground=t["warn"],
                       text=tr('Файл хранилища не найден:\n') + self.vault.path + tr('\nЕсли это облачная папка, дождитесь синхронизации. Иначе будет создано новое пустое хранилище.')
@@ -3141,10 +3180,10 @@ class App:
             self.show_main()
             self.animate_entry()
 
-        ttk.Button(card, text=(tr('Создать хранилище') if new else tr('Открыть')),
+        midnight_button(card, text=(tr('Создать хранилище') if new else tr('Открыть')),
                    style="Accent.TButton", command=submit).pack(fill="x", ipady=3)
         if not new and not needs_kf and self.hello.enabled():
-            ttk.Button(card, text=tr('◉  Войти через Windows Hello'),
+            midnight_button(card, text=tr('◉  Войти через Windows Hello'),
                        command=lambda: self.hello_login(err)).pack(fill="x", pady=(10, 0))
         self.root.bind("<Return>", submit)
         ttk.Label(f, text=tr('AES-256-GCM  ·  данные хранятся только на этом компьютере'),
@@ -3256,7 +3295,7 @@ class App:
         hero = ttk.Frame(f, padding=(24, 18))
         hero.pack(fill="x")
         DesignButton(hero,tr("Новая запись"),self.add,t,kind="primary",icon="plus",height=40,scale=scale,font_size=font_size).pack(side="right",pady=8)
-        ttk.Label(hero,text="BITORA PASSWORD",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,5))
+        ttk.Label(hero,text="BITORA PASWWORD MANAGER",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,5))
         ttk.Label(hero,text=tr("Записи"),style="Hero.TLabel").pack(anchor="w")
         overview=ttk.Frame(f)
         self._build_stats(overview)
@@ -3296,12 +3335,12 @@ class App:
         self.side.tag_configure("head", foreground=t["muted"], font=(FF, 8, "bold"))
         tools = ttk.Frame(side_fr, style="Side.TFrame", padding=12)
         tools.pack(side="bottom", fill="x")
-        ttk.Button(tools,text=tr('Браузеры'),style="Ghost.TButton",command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=3)
+        midnight_button(tools,text=tr('Браузеры'),style="Ghost.TButton",command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=3)
         ttk.Separator(tools).pack(fill="x", pady=(0, 12))
         for text, command in ((tr('Аудит безопасности'), self.audit),
                               (tr('Генератор паролей'), lambda: GeneratorDialog(self, self.root)),
                               (tr('Настройки'), lambda: SettingsDialog(self, self.root))):
-            ttk.Button(tools, text=tr(text), style="Ghost.TButton", command=command).pack(fill="x", pady=3)
+            midnight_button(tools, text=tr(text), style="Ghost.TButton", command=command).pack(fill="x", pady=3)
         navigation.pack(fill="both", expand=True)
         self.side.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=6)
         nav_scroll = ttk.Scrollbar(navigation, orient="vertical", command=self.side.yview)
@@ -3327,8 +3366,8 @@ class App:
         self.library_picker.bind("<<ComboboxSelected>>",lambda event:self.set_library_filter(self.library_choices[self.library_filter.get()]))
         utilities=ttk.Frame(center,padding=(4,0,4,8));utilities.pack(fill="x")
         self.list_count=ttk.Label(utilities,text="",style="BgMuted.TLabel");self.list_count.pack(side="left")
-        ttk.Button(utilities,text=tr("Фильтры"),style="Quiet.TButton",command=self.toggle_filters).pack(side="right")
-        ttk.Button(utilities,text=tr("Сортировка"),style="Quiet.TButton",command=lambda:self.sort_by("title")).pack(side="right",padx=8)
+        midnight_button(utilities,text=tr("Фильтры"),style="Quiet.TButton",command=self.toggle_filters).pack(side="right")
+        midnight_button(utilities,text=tr("Сортировка"),style="Quiet.TButton",command=lambda:self.sort_by("title")).pack(side="right",padx=8)
         lst = ttk.Frame(center)
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
@@ -3355,6 +3394,8 @@ class App:
         self.tree.bind("<Control-c>", lambda e: self.copy_login())
         self.tree.bind("<Control-Shift-C>", lambda e: self.copy_password())
         self.tree.bind("<Button-3>", self.context_menu)
+        self.record_view.on_drag_motion=self._drag_categories
+        self.record_view.on_drop=self._drop_records
         if compact:
             body.add(center, text=tr('Записи'))
             body.select(center)
@@ -3396,6 +3437,7 @@ class App:
         r.bind("<Control-l>", self._guard(self.lock))
         r.bind("<Control-b>", self._guard(self.copy_login))
         r.bind("<Control-Shift-C>", self._guard(self.copy_password))
+        r.bind('<Control-z>',self._undo_key)
         self.refresh_all()
         self.set_status(tr('Хранилище открыто. Изменения сохраняются автоматически.'))
         if self._totp_job:
@@ -3410,8 +3452,8 @@ class App:
         if old and old.winfo_exists():old.destroy()
         panel=self._notification=ttk.Frame(self.frame,style="Panel.TFrame",padding=(18,12))
         ttk.Label(panel,text=text,style="Panel.TLabel",wraplength=500).pack(side="left")
-        if action:ttk.Button(panel,text=action_label or tr("Открыть"),command=action).pack(side="left",padx=12)
-        ttk.Button(panel,text="×",width=3,command=panel.destroy).pack(side="right",padx=(12,0))
+        if action:midnight_button(panel,text=action_label or tr("Открыть"),command=action).pack(side="left",padx=12)
+        midnight_button(panel,text="×",width=3,command=panel.destroy).pack(side="right",padx=(12,0))
         panel.place(relx=0.5,rely=0.96,anchor="s")
         self.root.after(10000,lambda:panel.destroy() if panel.winfo_exists() else None)
 
@@ -3430,6 +3472,62 @@ class App:
         if self.filter_bar.winfo_manager():self.filter_bar.pack_forget()
         else:self.filter_bar.pack(side="top",fill="x",before=self.center_panel.winfo_children()[-1])
 
+    def remember_undo(self,change,text):
+        self._undo_actions.append(change)
+        self._undo_actions=self._undo_actions[-20:]
+        self.notify(text,lambda:self.undo_action(change),action_label=tr('Отменить'))
+
+    def undo_action(self,change=None):
+        if not self.vault.unlocked or not self._undo_actions:return
+        change=change or self._undo_actions[-1]
+        if not any(item is change for item in self._undo_actions):return
+        from product_features import undo_change
+        ok,_=self._do(undo_change,self.vault,change)
+        if ok:
+            self._undo_actions=[item for item in self._undo_actions if item is not change]
+            self.refresh_all();self.notify(tr('Действие отменено'))
+
+    def _undo_key(self,event):
+        if event.widget.winfo_class() in ('Entry','TEntry','Text','TCombobox','TSpinbox'):return
+        self.undo_action();return 'break'
+
+    def move_to_category(self,ids,target):
+        if not self.vault.unlocked:return
+        from product_features import move_records
+        ok,change=self._do(move_records,self.vault,ids,target)
+        if ok:
+            self.refresh_all()
+            if change['records']:self.remember_undo(change,tr('Записи перенесены'))
+
+    def reorder_category(self,name,offset):
+        names=self.vault.categories()
+        if name not in names:return
+        index=names.index(name);destination=index+offset
+        if not 0<=destination<len(names):return
+        names[index],names[destination]=names[destination],names[index]
+        from product_features import reorder_categories
+        ok,change=self._do(reorder_categories,self.vault,names)
+        if ok:self.refresh_all();self.remember_undo(change,tr('Порядок категорий сохранён'))
+
+    def _drop_target(self,x,y):
+        if self.side.winfo_ismapped() and self.side.winfo_rootx()<=x<self.side.winfo_rootx()+self.side.winfo_width() and self.side.winfo_rooty()<=y<self.side.winfo_rooty()+self.side.winfo_height():
+            item=self.side.identify_row(y-self.side.winfo_rooty())
+            if item.startswith('cat:'):return item[4:]
+            if item=='uncat':return ''
+        widget=self.root.winfo_containing(x,y)
+        return getattr(self,'category_drop_targets',{}).get(widget)
+
+    def _drag_categories(self,x,y):
+        if self._sidebar_hidden and not self.compact:self.toggle_sidebar(persist=False)
+        target=self._drop_target(x,y)
+        self.status_right.configure(text=tr('Перенести в: ')+(target or tr('Без категории')) if target is not None else tr('Перетащите на категорию'))
+
+    def _drop_records(self,ids,x,y):
+        target=self._drop_target(x,y)
+        if target is not None:self.move_to_category(ids,target)
+        else:self.notify(tr('Перенос отменён: выберите категорию'))
+        self.refresh_list()
+
     def refresh_category_chips(self):
         if not hasattr(self,"category_chips") or not self.category_chips.winfo_exists():return
         cats=self.vault.categories()
@@ -3439,11 +3537,13 @@ class App:
         key=(tuple(cats[:limit]),self.cat_filter)
         if self.category_chips_key==key:return
         self.category_chips_key=key
+        self.category_drop_targets={}
         for child in self.category_chips.winfo_children():child.destroy()
         scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
         for value,label in [("all",tr("Все"))]+[("cat:"+cat,cat) for cat in cats[:limit]]:
             button=DesignButton(self.category_chips,label,lambda selected=value:self.set_library_filter(selected),self.t,kind="chip",width=int((60 if value=="all" else 108)*scale),height=34,scale=scale,font_size=9)
             button.selected=self.cat_filter==value;button.pack(side="left",padx=(0,4))
+            if value.startswith('cat:'):self.category_drop_targets[button]=value[4:]
 
     def toggle_sidebar(self,persist=True):
         if not hasattr(self,"side_panel") or not self.side_panel.winfo_exists():return
@@ -3488,6 +3588,8 @@ class App:
         self.side.selection_set(item)
         menu=self._menu()
         menu.add_command(label=tr("Изменить категорию…"),command=lambda:feature_dialogs.categories(self,item[4:]))
+        menu.add_command(label=tr('Выше'),command=lambda:self.reorder_category(item[4:],-1))
+        menu.add_command(label=tr('Ниже'),command=lambda:self.reorder_category(item[4:],1))
         menu.add_command(label=tr('Удалить категорию…'),command=lambda:self.delete_category(item[4:]))
         menu.tk_popup(event.x_root,event.y_root)
 
@@ -3499,7 +3601,7 @@ class App:
                 frame=ttk.Frame(top,padding=24);frame.pack()
                 choice=tk.StringVar(value=self.vault.categories()[0] if self.vault.categories() else "")
                 ttk.Combobox(frame,textvariable=choice,values=self.vault.categories(),state="readonly").pack()
-                ttk.Button(frame,text=tr('Удалить'),command=lambda:(top.destroy(),self.delete_category(choice.get()))).pack(pady=12)
+                midnight_button(frame,text=tr('Удалить'),command=lambda:(top.destroy(),self.delete_category(choice.get()))).pack(pady=12)
                 return
         if not name:return
         feature_dialogs.delete_category(self,name)
@@ -3564,7 +3666,7 @@ class App:
         ttk.Label(frm, text=f"{tr('Версия ')}{APP_VERSION}", foreground=t["muted"]).pack()
         ttk.Label(frm, text=tr('Шифрование AES-256-GCM, ключ из мастер-пароля (scrypt).\nДанные хранятся только на вашем компьютере.\n\n') + self.vault.path,
                   justify="center", wraplength=380, foreground=t["muted"]).pack(pady=14)
-        ttk.Button(frm, text=tr('Закрыть'), command=top.destroy).pack()
+        midnight_button(frm, text=tr('Закрыть'), command=top.destroy).pack()
         top.grab_set()
         self.root.wait_window(top)
 
@@ -3627,7 +3729,7 @@ class App:
             var=tk.StringVar()
             actions=ttk.Frame(line,style="Card.TFrame");actions.pack(side="right")
             for btn_text,cmd in reversed(btns):
-                b=ttk.Button(actions,text=btn_text,command=cmd,style="TextAction.TButton")
+                b=midnight_button(actions,text=btn_text,command=cmd,style="TextAction.TButton")
                 b.pack(side="right",padx=(5,0))
                 if key=="password" and btn_text==tr("Показать"):self.pw_btn=b
             label=ttk.Label(line,textvariable=var,style="CardMono.TLabel" if key in ("password","totp") else "Card.TLabel",wraplength=180,justify="left")
@@ -3658,17 +3760,17 @@ class App:
         self.act_normal=ttk.Frame(p,style="Panel.TFrame")
         button_palette=dict(self.t,bg=self.t["panel"])
         DesignButton(self.act_normal,tr("Изменить"),self.edit,button_palette,scale=scale,height=36,font_size=9).pack(side="left")
-        self.hist_btn=ttk.Button(self.act_normal,text=tr("История"),command=self.show_history,style="DetailAction.TButton");self.hist_btn.pack(side="left",padx=8)
-        self.fav_btn=ttk.Button(self.act_normal,command=self.toggle_fav)
-        self.att_btn=ttk.Button(self.act_normal,command=self.attachments)
+        self.hist_btn=midnight_button(self.act_normal,text=tr("История"),command=self.show_history,style="DetailAction.TButton");self.hist_btn.pack(side="left",padx=8)
+        self.fav_btn=midnight_button(self.act_normal,command=self.toggle_fav)
+        self.att_btn=midnight_button(self.act_normal,command=self.attachments)
         more=self._menu()
         for label,action in ((tr("Открыть сайт"),self.open_url),(tr("Избранное"),self.toggle_fav),(tr("Вложения"),self.attachments),(tr("⌨ Ввести"),self.autotype_selected),(tr("Утечки?"),self.check_pwned_selected),(tr("Удалить запись"),self.delete)):
             more.add_command(label=label,command=action)
         ttk.Menubutton(self.act_normal,text=tr("Ещё"),menu=more,style="Header.TMenubutton").pack(side="left")
         self.act_trash = ttk.Frame(p, style="Panel.TFrame")
-        ttk.Button(self.act_trash, text=tr('Восстановить'), style="Accent.TButton",
+        midnight_button(self.act_trash, text=tr('Восстановить'), style="Accent.TButton",
                    command=self.restore).pack(side="left")
-        ttk.Button(self.act_trash, text=tr('Удалить навсегда'), command=self.purge).pack(side="right")
+        midnight_button(self.act_trash, text=tr('Удалить навсегда'), command=self.purge).pack(side="right")
         self.act_normal.grid(row=11, column=0, sticky="we", pady=(14, 0))
         self.act_trash.grid(row=11, column=0, sticky="we", pady=(14, 0))
         self.show_details()
@@ -3990,12 +4092,15 @@ class App:
             return
         if e["deleted"]:
             return self.purge()
-        if messagebox.askyesno(tr(APP_NAME), f"{tr('Переместить «')}{e['title']}{tr('» в корзину?\nЗапись хранится ')}{TRASH_DAYS}{tr(' дней.')}", parent=self.root):
-            ok, _ = self._do(self.vault.soft_delete, e["id"])
+        count=len(self.tree.selection())
+        prompt=(tr('Выбрано записей: ')+str(count)+'\n'+tr('Переместить выбранные записи в корзину?') if count>1 else
+                f"{tr('Переместить «')}{e['title']}{tr('» в корзину?\nЗапись хранится ')}{TRASH_DAYS}{tr(' дней.')}")
+        if messagebox.askyesno(tr(APP_NAME),prompt,parent=self.root):
+            from product_features import trash_records
+            ok, change = self._do(trash_records,self.vault,list(self.tree.selection()))
             if ok:
                 self.refresh_all()
-                entry_id=e["id"]
-                self.notify(tr("Запись перемещена в корзину"),lambda:self.undo_delete(entry_id),action_label=tr("Отменить"))
+                self.remember_undo(change,tr("Записи перемещены в корзину"))
 
     def undo_delete(self,entry_id):
         if not self.vault.unlocked:return
@@ -4249,7 +4354,7 @@ def main():
         print(tr('Не найден tkinter. Установите Python с python.org (компонент tcl/tk).'))
         sys.exit(1)
     if not win_single_instance():
-        win_message(tr('«Bitora password» уже запущены. Найдите значок программы в области уведомлений (трей).'))
+        win_message(tr('«Bitora Paswword Manager» уже запущены. Найдите значок программы в области уведомлений (трей).'))
         sys.exit(0)
     App().run()
 

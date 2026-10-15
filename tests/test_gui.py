@@ -37,8 +37,61 @@ class DesktopTests(unittest.TestCase):
                 self.app.root.after(100, self.close_dialog)
                 cls(self.app, self.app.root)
 
+    def test_midnight_messages_cancel_and_input_and_lock_close(self):
+        from midnight_dialogs import messagebox,simpledialog
+        def choose(label):
+            def visit(widget):
+                for child in widget.winfo_children():
+                    if isinstance(child,m.DesignButton) and child.cget('text')==label:child.invoke();return True
+                    if visit(child):return True
+                return False
+            self.assertTrue(visit(self.app.root))
+        self.app.root.after(80,lambda:choose('Нет'))
+        self.assertFalse(messagebox.askyesno('Test','Synthetic confirmation',parent=self.app.root))
+        self.app.root.after(80,lambda:choose('Продолжить'))
+        self.assertEqual(simpledialog.askstring('Test','Synthetic input',initialvalue='Fake',parent=self.app.root),'Fake')
+        self.app.settings.set('lock_on_session_lock',True)
+        self.app.root.after(80,lambda:self.app._session_event('session'))
+        self.assertIsNone(simpledialog.askstring('Test','Synthetic input',parent=self.app.root))
+        self.assertFalse(self.app.vault.unlocked)
+
+    def test_drag_preserves_selection_and_drop_can_be_undone(self):
+        from types import SimpleNamespace
+        from product_features import category_change
+        for name in ('Personal','Work'):category_change(self.app.vault,name)
+        ids=[self.app.vault.add({'title':title,'category':'Work','password':'FakeOnly!789'})['id'] for title in ('First','Second')]
+        self.app.refresh_all();self.app.root.update()
+        self.app.tree.selection_set(ids);view=self.app.record_view
+        event=SimpleNamespace(y=10,x_root=view.winfo_rootx()+20,y_root=view.winfo_rooty()+10,state=0)
+        view.press(event)
+        self.assertEqual(set(self.app.tree.selection()),set(ids))
+        with patch.object(self.app,'_drop_target',return_value='Personal'):
+            self.app._drop_records(ids,event.x_root,event.y_root)
+        self.assertTrue(all(self.app.vault.get(item)['category']=='Personal' for item in ids))
+        self.app.undo_action()
+        self.assertTrue(all(self.app.vault.get(item)['category']=='Work' for item in ids))
+        self.app.reorder_category('Work',-1)
+        self.assertEqual(self.app.vault.categories(),['Work','Personal'])
+        self.app.undo_action();self.assertEqual(self.app.vault.categories(),['Personal','Work'])
+        self.app.move_to_category(ids,'Personal')
+        self.app.vault.update(ids[0],{'note':'A newer edit'})
+        with patch.object(m.messagebox,'showwarning') as warning:
+            self.app.undo_action()
+        warning.assert_called_once()
+        self.assertEqual(self.app.vault.get(ids[0])['note'],'A newer edit')
+
+    def test_idle_uses_monotonic_clock_and_resume_gap_locks(self):
+        self.app.last_activity=10
+        self.app.settings.set('idle_minutes',1)
+        with patch('moi_paroli.time.monotonic',return_value=71):self.app._idle_tick()
+        self.assertFalse(self.app.vault.unlocked)
+        self.app.vault.unlock('UITestPassword!789');self.app.show_main()
+        self.app._watch_clock=(100,100)
+        with patch('moi_paroli.time.monotonic',return_value=102),patch('moi_paroli.time.time',return_value=200):self.app._watch_tick()
+        self.assertFalse(self.app.vault.unlocked)
+
     def test_midnight_navigation_and_category_picker(self):
-        self.assertEqual(self.app.root.title(),'Bitora password')
+        self.assertEqual(self.app.root.title(),'Bitora Paswword Manager')
         self.assertEqual(self.app.theme_name,'dark')
         self.assertTrue(self.app._sidebar_hidden)
         self.assertEqual(tuple(self.app.tree.cget('displaycolumns')),('fav','title','login'))
@@ -136,7 +189,7 @@ class DesktopTests(unittest.TestCase):
     def test_language_switch_and_animation_finish(self):
         self.app.set_language('en')
         self.app.root.update()
-        self.assertEqual(self.app.root.title(),'Bitora password')
+        self.assertEqual(self.app.root.title(),'Bitora Paswword Manager')
         self.assertEqual(self.app.tree.heading('category')['text'],'Category')
         self.app.animate_entry()
         self.app.root.after(350,self.app.root.quit)
@@ -165,7 +218,7 @@ class DesktopTests(unittest.TestCase):
                         self.assertGreaterEqual(card.winfo_y(),0)
                         extent=list(map(float,canvas.cget('scrollregion').split()))
                         self.assertGreaterEqual(extent[3],card.winfo_reqheight())
-                        buttons=[w for w in card.winfo_children() if isinstance(w,m.ttk.Button)]
+                        buttons=[w for w in card.winfo_children() if isinstance(w,(m.ttk.Button,m.DesignButton))]
                         last=buttons[-1]
                         last.event_generate('<FocusIn>');self.app.root.update()
                         top=last.winfo_rooty()-canvas.winfo_rooty()

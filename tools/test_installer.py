@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory() as tmp:
     $shell = New-Object -ComObject WScript.Shell
     $links = @()
     foreach ($scope in @('Programs','CommonPrograms')) {
-        $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora password.lnk'
+        $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora Paswword Manager.lnk'
         if (!(Test-Path -LiteralPath $link)) { continue }
         $shortcut = $shell.CreateShortcut($link)
         $links += @{target=$shortcut.TargetPath; icon=$shortcut.IconLocation; link=$link}

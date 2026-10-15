@@ -98,4 +98,4 @@ class Release44Tests(unittest.TestCase):
         manifest=json.loads((root/'manifest.json').read_text(encoding='utf8'))
         for size,path in manifest['icons'].items():
             with Image.open(root/path) as img:self.assertEqual(img.size,(int(size),int(size)))
-        self.assertEqual(manifest['version'],'4.6.2')
+        self.assertEqual(manifest['version'],'4.7.0')

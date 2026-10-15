@@ -146,7 +146,7 @@ jobs:
             gh release upload $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip Bitora-password-Setup.exe Bitora-password-portable.zip Bitora-password-store-kit.zip dist/BUILD_MANIFEST.json --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed' }
           } else {
-            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip Bitora-password-Setup.exe Bitora-password-portable.zip Bitora-password-store-kit.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Bitora password $version" --notes-file RELEASE_NOTES.md
+            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip Bitora-password-Setup.exe Bitora-password-portable.zip Bitora-password-store-kit.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Bitora Paswword Manager $version" --notes-file RELEASE_NOTES.md
             if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
           }
 

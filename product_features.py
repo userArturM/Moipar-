@@ -159,6 +159,9 @@ def category_change(vault,name,new_name=None,color=None,icon=None,ids=None):
             vault.meta['categories']=[c for c in vault.meta['categories'] if c!=name]
             props[target]=props.pop(name,{})
             if target!=name:vault.meta.setdefault('category_tombstones',{})[name]=datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            if target!=name and name in vault.meta.get('category_order',{}).get('names',[]):
+                vault.meta['category_order']={'names':[target if value==name else value for value in vault.meta['category_order']['names']],
+                    'mtime':datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}
             for entry in vault.entries:
                 if entry['category']==name:entry['category']=target;vault._touch(entry)
         if target not in vault.meta['categories']:vault.meta['categories'].append(target)
@@ -174,6 +177,62 @@ def category_change(vault,name,new_name=None,color=None,icon=None,ids=None):
     except Exception:
         vault.entries,vault.meta=before
         raise
+
+def reorder_categories(vault,names):
+    names=list(names)
+    with transaction(vault):
+        current=vault.categories()
+        if len(names)!=len(set(names)) or set(names)!=set(current):raise ValueError('Selection changed')
+        before=current
+        stamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        vault.meta['category_order']={'names':names,'mtime':stamp}
+    return {'kind':'order','before':before,'expected':stamp}
+
+
+def move_records(vault,ids,target):
+    ids=list(dict.fromkeys(ids))
+    if not ids:raise ValueError('Select entries first')
+    changes=[]
+    with transaction(vault):
+        if target and target not in vault.categories():raise ValueError('Category not found')
+        records=[vault.get(item) for item in ids]
+        if any(entry is None or entry['deleted'] for entry in records):raise ValueError('Selection changed')
+        for entry in records:
+            if entry['category']==target:continue
+            changes.append({'id':entry['id'],'category':entry['category']})
+            entry['category']=target;vault._touch(entry)
+            changes[-1]['hash']=vault._record_hash(entry)
+    return {'kind':'move','records':changes}
+
+
+def trash_records(vault,ids):
+    from moi_paroli import now_str
+    ids=list(dict.fromkeys(ids));changes=[]
+    if not ids:raise ValueError('Select entries first')
+    with transaction(vault):
+        records=[vault.get(item) for item in ids]
+        if any(entry is None or entry['deleted'] for entry in records):raise ValueError('Selection changed')
+        for entry in records:
+            entry['deleted']=now_str();vault._touch(entry)
+            changes.append({'id':entry['id'],'category':entry['category'],'hash':vault._record_hash(entry)})
+    return {'kind':'trash','records':changes}
+
+
+def undo_change(vault,change):
+    with transaction(vault):
+        if change['kind']=='order':
+            if vault.meta.get('category_order',{}).get('mtime')!=change['expected']:raise ValueError('Selection changed')
+            if set(vault.categories())!=set(change['before']):raise ValueError('Selection changed')
+            vault.meta['category_order']={'names':change['before'],
+                'mtime':datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}
+        else:
+            records=[vault.get(item['id']) for item in change['records']]
+            if any(entry is None or vault._record_hash(entry)!=item['hash']
+                   for entry,item in zip(records,change['records'])):raise ValueError('Selection changed')
+            for entry,item in zip(records,change['records']):
+                if change['kind']=='trash':entry['deleted']=None
+                entry['category']=item['category'];vault._register_category(item['category']);vault._touch(entry)
+
 
 def matches_query(entry,query,issue_ids=None):
     try:tokens=shlex.split(query)
