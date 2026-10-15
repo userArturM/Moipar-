@@ -46,10 +46,16 @@ with tempfile.TemporaryDirectory() as tmp:
     # Read the actual generated shell shortcut, without launching the program.
     shortcut_check = r'''
     $shell = New-Object -ComObject WScript.Shell
-    $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'Bitora password.lnk'
-    $shortcut = $shell.CreateShortcut($link)
-    if ($shortcut.TargetPath -ne $env:BITORA_TEST_EXE) { throw 'Shortcut target mismatch' }
-    if ($shortcut.IconLocation -notlike ($env:BITORA_TEST_ICON + '*')) { throw 'Shortcut icon mismatch' }
+    $verified = 0
+    foreach ($scope in @('Programs','CommonPrograms')) {
+        $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora password.lnk'
+        if (!(Test-Path -LiteralPath $link)) { continue }
+        $shortcut = $shell.CreateShortcut($link)
+        if ($shortcut.TargetPath -ne $env:BITORA_TEST_EXE) { continue }
+        if ($shortcut.IconLocation -notlike ($env:BITORA_TEST_ICON + '*')) { throw 'Shortcut icon mismatch' }
+        $verified++
+    }
+    if (!$verified) { throw 'Installed shortcut target not found in either Start menu scope' }
     '''
     subprocess.run(['powershell','-NoProfile','-Command',shortcut_check],check=True,timeout=30,
                    env=dict(os.environ,BITORA_TEST_EXE=str(app/'MoiParoli.exe'),BITORA_TEST_ICON=str(installed_icon)))
