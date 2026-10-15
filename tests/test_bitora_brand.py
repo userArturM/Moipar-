@@ -14,6 +14,22 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class BitoraBrandTests(unittest.TestCase):
+    def test_shell_identity_is_separate_and_failure_does_not_block_startup(self):
+        from windows_branding import SHELL_APP_ID,set_shell_identity
+        self.assertEqual(SHELL_APP_ID,'Bitora.Password')
+        with patch('windows_branding.sys.platform','win32'),patch('ctypes.windll') as dll:
+            setter=dll.shell32.SetCurrentProcessExplicitAppUserModelID
+            setter.return_value=0
+            self.assertTrue(set_shell_identity())
+            setter.assert_called_once_with(SHELL_APP_ID)
+            setter.side_effect=OSError('Unavailable')
+            self.assertFalse(set_shell_identity())
+
+    def test_windows_icon_has_all_sizes_and_matches_supplied_logo(self):
+        with Image.open(ROOT/'icon.ico') as icon,Image.open(ROOT/'brand.png') as brand:
+            self.assertTrue({(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)}.issubset(icon.ico.sizes()))
+            self.assertEqual(icon.ico.getimage((256,256)).convert('RGBA').tobytes(),brand.convert('RGBA').tobytes())
+
     def test_name_and_stable_storage_browser_identity(self):
         self.assertEqual(app.APP_NAME,'Bitora password')
         self.assertEqual(HOST,'ru.moiparoli.host')

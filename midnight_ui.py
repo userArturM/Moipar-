@@ -138,6 +138,8 @@ class RecordList(tk.Canvas):
         self.bind('<MouseWheel>',lambda e:self.scroll(-int(e.delta/120)))
         for key,step in (('Up',-1),('Down',1),('Home','first'),('End','last'),('Prior',-6),('Next',6)):
             self.bind('<'+key+'>',lambda e,n=step:self.move(n))
+            self.bind('<Shift-'+key+'>',lambda e,n=step:self.move(n,extend=True))
+        self.bind('<Control-a>',lambda e:self.select_all())
         self.bind('<Return>',lambda e:edit());self.bind('<Delete>',lambda e:delete())
         self.bind('<Control-c>',lambda e:copy_login());self.bind('<Control-Shift-C>',lambda e:copy_password())
         self.bind('<FocusIn>',lambda e:self.draw());self.bind('<FocusOut>',lambda e:self.draw())
@@ -208,11 +210,23 @@ class RecordList(tk.Canvas):
         self.model.focus(item);self.model.event_generate('<<TreeviewSelect>>')
         callback(event)
 
-    def move(self,step):
+    def select_all(self):
+        self.model.selection_set(self.ids)
+        self.model.event_generate('<<TreeviewSelect>>');self.draw()
+        return 'break'
+
+    def move(self,step,extend=False):
         if not self.ids:return 'break'
-        selected=self.model.selection();index=self.ids.index(selected[-1]) if selected and selected[-1] in self.ids else -1
+        selected=self.model.selection();current=self.model.focus()
+        index=self.ids.index(current) if current in self.ids else self.ids.index(selected[-1]) if selected and selected[-1] in self.ids else -1
+        if extend and self.anchor not in self.ids:self.anchor=self.ids[max(0,index)]
         index=0 if step=='first' else len(self.ids)-1 if step=='last' else max(0,min(len(self.ids)-1,index+step))
-        self.model.selection_set(self.ids[index]);self.model.focus(self.ids[index]);self.anchor=self.ids[index]
+        if extend:
+            begin=self.ids.index(self.anchor)
+            self.model.selection_set(self.ids[min(begin,index):max(begin,index)+1])
+        else:
+            self.model.selection_set(self.ids[index]);self.anchor=self.ids[index]
+        self.model.focus(self.ids[index])
         self.model.event_generate('<<TreeviewSelect>>');self.see(self.ids[index]);return 'break'
 
     def see(self,item):

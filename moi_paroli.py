@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora password 4.6.1 — менеджер личных паролей для Windows.
+Bitora password 4.6.2 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -56,7 +56,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Bitora password"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.6.1"
+APP_VERSION = "4.6.2"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -2420,6 +2420,8 @@ class App:
                ("category", tr('Категория'), 130), ("updated", tr('Изменено'), 100))
 
     def __init__(self):
+        from windows_branding import set_shell_identity
+        set_shell_identity()
         self.root = tk.Tk()
         self.root.title(APP_NAME)
         self.settings = Settings(os.path.join(data_dir(), "settings.json"))
@@ -3898,8 +3900,9 @@ class App:
             self.tree.insert("", "end", iid=e["id"], tags=("alternate",) if index % 2 else (), values=(
                 "★" if e["favorite"] else "", e["title"], e["login"], e["category"],
                 (e["deleted"] if self.cat_filter == "trash" else e["updated"])[:10]))
-        if prev and self.tree.exists(prev[0]):
-            self.tree.selection_set(prev[0])
+        retained = [item for item in prev if self.tree.exists(item)]
+        if retained:
+            self.tree.selection_set(retained)
         if hasattr(self,"record_view") and self.record_view.winfo_exists():self.record_view.refresh()
         if hasattr(self,"list_count") and self.list_count.winfo_exists():self.list_count.configure(text=tr("Записей: ")+str(len(items)))
         total = len(self.vault.active()) if self.cat_filter != "trash" else len(self.vault.trash())
@@ -3933,7 +3936,8 @@ class App:
         iid = self.tree.identify_row(event.y)
         if not iid:
             return
-        self.tree.selection_set(iid)
+        if iid not in self.tree.selection():
+            self.tree.selection_set(iid)
         e = self.vault.get(iid)
         m = self.ctx
         m.delete(0, "end")

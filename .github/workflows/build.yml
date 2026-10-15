@@ -66,6 +66,8 @@ jobs:
         run: ./tools/sign_windows.ps1 -Phase installer
       - name: Verify built executables
         run: python tools/verify_windows_build.py
+      - name: Verify Bitora icon resources
+        run: python tools/verify_brand_icons.py
       - name: Test packaged Native Messaging host
         run: python tools/test_packaged_host.py
       - name: Download previous 4.1 installer for upgrade test

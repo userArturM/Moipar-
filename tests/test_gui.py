@@ -78,6 +78,25 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(self.app.filter_bar.winfo_ismapped())
         self.app.toggle_filters();self.assertFalse(self.app.filter_bar.winfo_manager())
 
+    def test_multi_selection_survives_sort_and_context_menu_and_keyboard_range(self):
+        from types import SimpleNamespace
+        for title in ('Alpha','Beta','Gamma','Delta'):
+            self.app.vault.add({'title':title,'password':'FakeOnly!789'})
+        self.app.refresh_all();self.app.root.update()
+        view=self.app.record_view
+        view.move('first');view.move(1,extend=True)
+        chosen=set(self.app.tree.selection())
+        self.assertEqual(len(chosen),2)
+        view.move(-1,extend=True)
+        self.assertEqual(len(self.app.tree.selection()),1)
+        view.move(1,extend=True)
+        with patch.object(self.app.ctx,'tk_popup'):
+            self.app.context_menu(SimpleNamespace(y=10,x_root=0,y_root=0))
+        self.assertEqual(set(self.app.tree.selection()),chosen)
+        self.app.sort_by('title')
+        self.assertEqual(set(self.app.tree.selection()),chosen)
+        view.select_all();self.assertEqual(len(self.app.tree.selection()),4)
+
     def test_recovery_dialogs_and_duplicate_choices_open_in_both_languages(self):
         import feature_dialogs
         for title in ('First','Second'):

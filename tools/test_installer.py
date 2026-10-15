@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory() as tmp:
     setup = Path("installer_out/MoiParoli-Setup.exe").resolve()
     # Seed realistic user data before installing/upgrading.
     from moi_paroli import Vault, Settings
+    from moi_paroli import APP_VERSION
     vault = Vault(str(data / "vault.dat"))
     vault.create("UpgradeTestOnly!789")
     record = vault.add({"title": "Upgrade account", "login": "test@example.com",
@@ -38,6 +39,21 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in ("MoiParoli.exe", "browser_host.exe", "browser_extension/manifest.json",
                  "register_browser_host.ps1", "unins000.exe"):
         assert (app / name).is_file(), f"Missing installed file: {name}"
+    from tools.verify_brand_icons import verify_icon
+    installed_icon = app / f'bitora-{APP_VERSION}.ico'
+    assert installed_icon.read_bytes() == Path('icon.ico').read_bytes(), 'Installed icon changed'
+    verify_icon(app / 'MoiParoli.exe', installed_icon)
+    # Read the actual generated shell shortcut, without launching the program.
+    shortcut_check = r'''
+    $shell = New-Object -ComObject WScript.Shell
+    $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'Bitora password.lnk'
+    $shortcut = $shell.CreateShortcut($link)
+    if ($shortcut.TargetPath -ne $env:BITORA_TEST_EXE) { throw 'Shortcut target mismatch' }
+    if ($shortcut.IconLocation -notlike ($env:BITORA_TEST_ICON + '*')) { throw 'Shortcut icon mismatch' }
+    '''
+    subprocess.run(['powershell','-NoProfile','-Command',shortcut_check],check=True,timeout=30,
+                   env=dict(os.environ,BITORA_TEST_EXE=str(app/'MoiParoli.exe'),BITORA_TEST_ICON=str(installed_icon)))
+    print('Installed Bitora icon and Start menu shortcut verified')
     from browser_registration import diagnose
     assert all(item["ok"] for item in diagnose()), "Installer did not register all native host views"
     subprocess.run(["node", "tools/test_native_connection.cjs", str(app / "browser_extension")],

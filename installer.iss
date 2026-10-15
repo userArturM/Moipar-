@@ -1,6 +1,6 @@
 ﻿#define MyAppName "Bitora password"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.6.1"
+#define MyAppVersion "4.6.2"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}
@@ -15,7 +15,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=installer_out
 OutputBaseFilename=MoiParoli-Setup
 SetupIconFile=icon.ico
-UninstallDisplayIcon={app}\{#MyAppExe}
+UninstallDisplayIcon={app}\bitora-{#MyAppVersion}.ico
 UninstallDisplayName={#MyAppName}
 VersionInfoDescription=Bitora password
 VersionInfoProductName=Bitora password
@@ -37,14 +37,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительно:"; Flags: unchecked
 
 [Files]
+Source: "icon.ico"; DestDir: "{app}"; DestName: "bitora-{#MyAppVersion}.ico"; Flags: ignoreversion
 Source: "dist\MoiParoli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\browser_host.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "browser_extension\*"; DestDir: "{app}\browser_extension"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "register_browser_host.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\bitora-{#MyAppVersion}.ico"; AppUserModelID: "Bitora.Password"; Tasks: desktopicon
 
 [InstallDelete]
 Type: files; Name: "{autoprograms}\Мои пароли.lnk"
@@ -53,4 +54,14 @@ Type: files; Name: "{autodesktop}\Мои пароли.lnk"
 [Run]
 Filename: "{app}\browser_host.exe"; Parameters: "--register"; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExe}"; Description: "Запустить «{#MyAppName}»"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure SHChangeNotify(wEventId: Integer; uFlags: Cardinal; dwItem1, dwItem2: Integer);
+  external 'SHChangeNotify@shell32.dll stdcall';
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SHChangeNotify($08000000, 0, 0, 0);
+end;
 

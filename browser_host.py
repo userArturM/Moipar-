@@ -15,6 +15,8 @@ MAX_MESSAGE = 64 * 1024
 def apply_brand_icon(root):
     import tkinter as tk
     from moi_paroli import ICON_B64
+    from windows_branding import set_shell_identity
+    set_shell_identity()
     root.bitora_icon=tk.PhotoImage(data=ICON_B64)
     root.iconphoto(True,root.bitora_icon)
 
@@ -312,7 +314,7 @@ def save_record(host,candidate):
 
 def handle(msg, selector=select_record, saver=save_record):
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.6.1","supports":["get_credentials","save_credentials"]}
+        return {"ok":True,"version":"4.6.2","supports":["get_credentials","save_credentials"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)
