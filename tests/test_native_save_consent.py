@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 import tkinter as tk
 from tkinter import ttk
+from midnight_ui import DesignButton
 from moi_paroli import Vault
 from browser_host import save_record
 
@@ -29,7 +30,7 @@ class NativeSaveConsentTests(unittest.TestCase):
                     entries=[w for w in widgets if isinstance(w,ttk.Entry)]
                     entries[2].insert(0,'Wrong' if mode=='wrong' else 'ConsentTest!789')
                     if mode=='wrong':root.after(300,root.destroy)
-                    next(w for w in widgets if isinstance(w,ttk.Button) and
+                    next(w for w in widgets if isinstance(w,(ttk.Button,DesignButton)) and
                          w.cget('text')=='Подтвердить и сохранить').invoke()
                 root.after(150,act)
                 return root

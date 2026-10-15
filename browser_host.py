@@ -12,12 +12,16 @@ from urllib.parse import urlparse
 
 MAX_MESSAGE = 64 * 1024
 
+def midnight_button(*args,**kwargs):
+    from midnight_ui import button
+    return button(*args,**kwargs)
+
 def apply_brand_icon(root):
     import tkinter as tk
     from moi_paroli import ICON_B64
     from windows_branding import set_shell_identity
     set_shell_identity()
-    root.bitora_icon=tk.PhotoImage(data=ICON_B64)
+    root.bitora_icon=tk.PhotoImage(master=root,data=ICON_B64)
     root.iconphoto(True,root.bitora_icon)
 
 
@@ -101,14 +105,15 @@ def add_hello_button(root, parent, path, approved, status, password_button):
         status.configure(text=tr('Ожидание подтверждения Windows Hello…'))
         request_hello(root, hello, accepted, failed)
 
-    button = ttk.Button(parent, text=tr('Подтвердить через Windows Hello'), command=begin)
+    button = midnight_button(parent, text=tr('Подтвердить через Windows Hello'), command=begin)
     button.pack(fill='x', padx=12, pady=8)
 
 
 def select_record(host):
     # Imported lazily so native protocol tests do not require a display.
     import tkinter as tk
-    from tkinter import ttk, messagebox
+    from tkinter import ttk
+    from midnight_dialogs import messagebox
     from moi_paroli import Vault, Settings, data_dir, VaultError, App, _scroll_dialog_body
     from types import SimpleNamespace
 
@@ -182,7 +187,7 @@ def select_record(host):
                         if indices:
                             selected['entry'] = entries[indices[0]]
                         chooser.destroy()
-                    ttk.Button(chooser, text=tr('Подтвердить выбранный аккаунт'), command=choose).pack(pady=9)
+                    midnight_button(chooser, text=tr('Подтвердить выбранный аккаунт'), command=choose).pack(pady=9)
                     root.wait_window(chooser)
                     entry = selected['entry']
                 if entry is not None:
@@ -200,10 +205,10 @@ def select_record(host):
             if finished:
                 root.destroy()
 
-    approve = ttk.Button(frame, text=tr('Разрешить однократное заполнение'), command=confirm)
+    approve = midnight_button(frame, text=tr('Разрешить однократное заполнение'), command=confirm)
     approve.pack(pady=8)
     add_hello_button(root, frame, path, confirm, status, approve)
-    ttk.Button(frame, text=tr('Отмена'), command=root.destroy).pack(pady=6)
+    midnight_button(frame, text=tr('Отмена'), command=root.destroy).pack(pady=6)
     root.bind('<Return>', lambda _: confirm())
     root.mainloop()
     return result
@@ -302,10 +307,10 @@ def save_record(host,candidate):
         finally:
             vault.lock()
             master_password=None
-    approve=ttk.Button(frame,text=tr('Подтвердить и сохранить'),style="Accent.TButton",command=confirm)
+    approve=midnight_button(frame,text=tr('Подтвердить и сохранить'),style="Accent.TButton",command=confirm)
     approve.pack(fill="x")
     add_hello_button(root,frame,path,confirm,status,approve)
-    ttk.Button(frame,text=tr('Отмена'),command=root.destroy).pack(fill="x",pady=(8,0))
+    midnight_button(frame,text=tr('Отмена'),command=root.destroy).pack(fill="x",pady=(8,0))
     root.bind("<Return>",lambda event:confirm())
     root.bind("<Escape>",lambda event:root.destroy())
     master.focus_set()

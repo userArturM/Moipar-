@@ -2501,6 +2501,9 @@ class App:
         t = self.t = THEMES[self.theme_name]
         self.root._midnight_palette=t
         self.root._midnight_font_size=font_size
+        if not hasattr(self.root,'_bitora_app'):
+            self.root._bitora_app=self
+            self.icon=getattr(self.root,'bitora_icon',None)
         s = self.style = ttk.Style(self.root)
         try:
             s.theme_use("clam")

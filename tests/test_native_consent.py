@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 import tkinter as tk
 from tkinter import ttk
+from midnight_ui import DesignButton
 from moi_paroli import Vault
 from browser_host import select_record
 
@@ -33,7 +34,7 @@ class NativeConsentTests(unittest.TestCase):
                 def walk(widget):
                     for child in widget.winfo_children():
                         if isinstance(child,ttk.Entry): entries.append(child)
-                        if isinstance(child,ttk.Button): buttons.append(child)
+                        if isinstance(child,(ttk.Button,DesignButton)): buttons.append(child)
                         walk(child)
                 walk(root)
                 entries[0].insert(0,"Wrong" if mode=="wrong" else "NativeConsentTest!789")
@@ -49,7 +50,7 @@ class NativeConsentTests(unittest.TestCase):
                         listing=next(w for w in child.winfo_children() if isinstance(w,tk.Listbox))
                         listing.selection_clear(0,"end")
                         listing.selection_set(1)
-                        next(w for w in child.winfo_children() if isinstance(w,ttk.Button)).invoke()
+                        next(w for w in child.winfo_children() if isinstance(w,(ttk.Button,DesignButton))).invoke()
             root.after(150,first)
             return root
         with patch("tkinter.Tk",side_effect=factory):
