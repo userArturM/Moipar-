@@ -12,6 +12,71 @@ def rounded(canvas,x,y,width,height,radius,fill,outline=''):
         outline=outline,width=1)
 
 
+def blend(first, second, amount):
+    return '#' + ''.join(f'{round(int(first[i:i+2],16)*(1-amount)+int(second[i:i+2],16)*amount):02x}' for i in (1,3,5))
+
+
+def monogram_colors(title, palette):
+    """Locally drawn identities; no requests for remote service icons."""
+    colors = ('#a6d4ff', '#d3baff', '#b5e9d5', '#f4d0a6', '#b7dce8')
+    color = colors[sum(map(ord, title)) % len(colors)]
+    # Keep dark text legible in the light theme as well.
+    dark = sum(int(palette['panel'][i:i+2],16) for i in (1,3,5)) < 384
+    return blend(palette['panel'], color, .14 if dark else .28), color if dark else blend(color, '#152c38', .75)
+
+
+class AtelierBackdrop(tk.Canvas):
+    """A restrained architectural motif behind the workspace heading."""
+    def __init__(self, parent, palette, scale=1, compact=False):
+        self.compact=compact
+        super().__init__(parent, bg=palette['bg'], highlightthickness=0, height=int(130*scale))
+        self.palette=palette; self.scale=scale
+        self.body=ttk.Frame(self, style='Panel.TFrame')
+        self.window=self.create_window((int(26*scale),int((10 if compact else 22)*scale)),window=self.body,anchor='nw')
+        self.bind('<Configure>',self.draw)
+        self.body.bind('<Configure>',self.draw)
+
+    def draw(self, event=None):
+        t=self.palette; s=self.scale; w=max(80,self.winfo_width())
+        h=max(int((52 if self.compact else 124)*s),self.body.winfo_reqheight()+int((20 if self.compact else 44)*s))
+        if self.winfo_reqheight()!=h:self.configure(height=h)
+        self.delete('decor')
+        rounded(self,1,1,w-2,h-2,20*s,t['panel'],t['border'])
+        self.addtag_withtag('decor',self.find_all()[-1])
+        # The motif lives behind controls; it never intercepts input.
+        for radius in (58,83,110,138):
+            self.create_oval(w-55*s-radius*s,h/2-radius*s,w-55*s+radius*s,h/2+radius*s,
+                outline=blend(t['panel'],t['accent'],.10),width=1,tags='decor')
+        self.create_line(27*s,1,91*s,1,fill=t['accent'],width=2*s,tags='decor')
+        self.tag_lower('decor')
+        self.itemconfigure(self.window,width=max(25,w-int((192 if w/s>700 else 52)*s)))
+
+
+class PasswordHealth(tk.Canvas):
+    def __init__(self,parent,palette,scale,title,empty_text,action):
+        super().__init__(parent,bg=palette['side'],height=int(94*scale),highlightthickness=0,takefocus=True,cursor='hand2')
+        self.palette=palette;self.scale=scale;self.title=title;self.caption=empty_text;self.score=None
+        self.title_font=tkfont.Font(parent,family='Segoe UI',size=9,weight='bold')
+        self.caption_font=tkfont.Font(parent,family='Segoe UI',size=8)
+        for event in ('<Button-1>','<Return>','<space>'):self.bind(event,lambda e:action())
+        for event in ('<Configure>','<FocusIn>','<FocusOut>'):self.bind(event,self.draw)
+
+    def update_summary(self,summary,caption):
+        self.score=summary['score'] if summary['total'] else None
+        self.caption=caption;self.draw()
+
+    def draw(self,event=None):
+        self.delete('all');t=self.palette;s=self.scale;w=self.winfo_width();h=self.winfo_height()
+        if w<40:return
+        rounded(self,1,1,w-2,h-2,13*s,t['panel'],t['accent'] if self.focus_get() is self else t['border'])
+        self.create_text(14*s,19*s,anchor='w',text=self.title,font=self.title_font,fill=t['fg'])
+        self.create_text(14*s,43*s,anchor='nw',text=self.caption,font=self.caption_font,fill=t['muted'],width=max(20,w-28*s))
+        self.create_line(14*s,h-14*s,w-14*s,h-14*s,fill=t['card'],width=3*s,capstyle='round')
+        if self.score:
+            color=t['accent'] if self.score>=80 else t['warn']
+            self.create_line(14*s,h-14*s,14*s+(w-28*s)*self.score/100,h-14*s,fill=color,width=3*s,capstyle='round')
+
+
 def line_icon(canvas,name,x,y,size,color,width=1.6):
     """Small consistent outline icons drawn in logical coordinates."""
     def p(a,b):return x+a*size/24,y+b*size/24
@@ -113,7 +178,12 @@ class DesignButton(tk.Canvas):
             start=14*s if self.align=='left' else (w-total)/2
             if self.icon:line_icon(self,self.icon,start,h/2-8*s,16*s,color,1.6*s)
             self.create_text(start+(25*s if self.icon else 0),h/2,text=label,font=self.text_font,fill=color,anchor='w')
-            if self.badge:self.create_text(w-14*s,h/2,text=self.badge,font=self.text_font,fill=color,anchor='e')
+            if self.badge:
+                badge_width=max(24*s,self.text_font.measure(self.badge)+14*s)
+                rounded(self,w-badge_width-9*s,h/2-11*s,badge_width,22*s,7*s,blend(fill,color,.08))
+                self.create_text(w-badge_width/2-9*s,h/2,text=self.badge,font=self.text_font,fill=color)
+        if self.selected and self.kind=='rail' and not self.vertical:
+            rounded(self,1,h/2-10*s,3*s,20*s,1.5*s,t['accent'])
 
 
 class IconButton(DesignButton):
@@ -246,9 +316,9 @@ class RecordList(tk.Canvas):
     def __init__(self,parent,model,vault,palette,scale,font_size,edit,delete,context,copy_login,copy_password):
         super().__init__(parent,background=palette['bg'],highlightthickness=0,borderwidth=0,takefocus=True)
         self.model=model;model.view=self;self.vault=vault;self.palette=palette;self.scale=scale
-        self.row_height=int(78*scale);self.ids=[];self.anchor=None;self.drawn=[]
+        self.row_height=int(84*scale);self.ids=[];self.anchor=None;self.drawn=[]
         self.hover_id=None
-        self.title_font=tkfont.Font(self,family='Segoe UI',size=font_size+1,weight='bold')
+        self.title_font=tkfont.Font(self,family='Segoe UI',size=font_size+1)
         self.sub_font=tkfont.Font(self,family='Segoe UI',size=max(9,font_size-1))
         self.avatar_font=tkfont.Font(self,family='Segoe UI',size=font_size+3)
         self.bind('<Configure>',lambda e:self.draw())
@@ -305,11 +375,12 @@ class RecordList(tk.Canvas):
             if active:rounded(self,1,y+2*s,w-3,self.row_height-4*s,10*s,t['sel'],t['border'])
             elif item==self.hover_id:rounded(self,1,y+2*s,w-3,self.row_height-4*s,10*s,t['hover'])
             if active:rounded(self,3*s,y+24*s,3*s,30*s,1.5*s,t['accent'])
-            rounded(self,13*s,y+19*s,38*s,38*s,10*s,t['card'],t['border'])
-            self.create_text(32*s,y+38*s,text=(entry['title'].strip()[:1] or '?').upper(),font=self.avatar_font,fill=t['accent'] if active else t['fg'])
-            left=66*s;space=max(30,w-left-38*s)
-            self.create_text(left,y+27*s,anchor='w',text=self.shorten(entry['title'],self.title_font,space),font=self.title_font,fill=t['fg'])
-            self.create_text(left,y+49*s,anchor='w',text=self.shorten(entry['login'] or entry['url'],self.sub_font,space),font=self.sub_font,fill=t['muted'])
+            avatar_bg,avatar_fg=monogram_colors(entry['title'],t)
+            rounded(self,13*s,y+20*s,42*s,42*s,13*s,avatar_bg)
+            self.create_text(34*s,y+41*s,text=(entry['title'].strip()[:1] or '?').upper(),font=self.avatar_font,fill=avatar_fg)
+            left=70*s;space=max(30,w-left-38*s)
+            self.create_text(left,y+29*s,anchor='w',text=self.shorten(entry['title'],self.title_font,space),font=self.title_font,fill=t['fg'])
+            self.create_text(left,y+52*s,anchor='w',text=self.shorten(entry['login'] or entry['url'],self.sub_font,space),font=self.sub_font,fill=t['muted'])
             if entry['favorite']:line_icon(self,'star',w-28*s,y+30*s,14*s,t['accent'],1.2*s)
             self.drawn.append(item)
         if self.focus_get() is self and self.ids:

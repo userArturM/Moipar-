@@ -687,5 +687,10 @@
   "Хранилище или мастер-ключ изменены. Повторно включите Windows Hello.": "The vault or master key changed. Enable Windows Hello again.",
   "Проверка Hello недоступна или истекло время ожидания": "Windows Hello is unavailable or verification timed out",
   "Неверный ID расширения": "Invalid extension ID",
-  "Не найден browser_host.exe": "browser_host.exe was not found"
+  "Не найден browser_host.exe": "browser_host.exe was not found",
+  "Аудит паролей": "Password audit",
+  "Добавьте первую запись": "Add your first entry",
+  "ЗАПИСИ": "ENTRIES",
+  " / 100 · Состояние паролей": " / 100 · Password health",
+  "Аккаунты, пароли и коды подтверждения.": "Accounts, passwords and verification codes."
 }

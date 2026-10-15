@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora Paswword Manager 4.8.0 — менеджер личных паролей для Windows.
+Bitora Paswword Manager 4.8.1 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -50,7 +50,7 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 try:
     import tkinter as tk
     from tkinter import ttk, messagebox, simpledialog, filedialog
-    from midnight_ui import DesignButton,RecordModel,RecordList,rounded,SearchField,IconButton,StatusPill
+    from midnight_ui import DesignButton,RecordModel,RecordList,rounded,SearchField,IconButton,StatusPill,AtelierBackdrop,PasswordHealth,monogram_colors
     from midnight_ui import button as midnight_button
     from midnight_dialogs import messagebox,simpledialog
 except ImportError:  # tkinter нужен только для окна
@@ -58,7 +58,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Bitora Paswword Manager"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.8.0"
+APP_VERSION = "4.8.1"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -1536,24 +1536,25 @@ def _scroll_dialog_body(top, padding=20):
 
 
 class RoundedCard(ttk.Frame):
-    def __init__(self,parent,palette):
+    def __init__(self,parent,palette,padding=(16,14),radius=16):
         super().__init__(parent)
+        px,py=padding
         self.canvas=tk.Canvas(self,bg=palette["bg"],highlightthickness=0,height=90)
         self.canvas.pack(fill="both",expand=True)
         self.body=ttk.Frame(self.canvas,style="Panel.TFrame")
-        self.window=self.canvas.create_window((16,14),window=self.body,anchor="nw")
+        self.window=self.canvas.create_window((px,py),window=self.body,anchor="nw")
         def draw(event=None):
             width=max(48,self.canvas.winfo_width())
-            height=max(60,self.body.winfo_reqheight()+28)
+            height=max(60,self.body.winfo_reqheight()+2*py)
             self.canvas.configure(height=height)
             self.canvas.delete("surface")
-            r=16
+            r=radius
             points=[r,1,width-r,1,width-1,1,width-1,r,width-1,height-r,
                     width-1,height-1,width-r,height-1,r,height-1,1,height-1,1,height-r,1,r,1,1]
             self.canvas.create_polygon(points,smooth=True,splinesteps=24,fill=palette["panel"],
                                        outline=palette["border"],tags="surface")
             self.canvas.tag_lower("surface")
-            self.canvas.itemconfigure(self.window,width=max(16,width-32))
+            self.canvas.itemconfigure(self.window,width=max(16,width-2*px))
         self.canvas.bind("<Configure>",draw)
         self.body.bind("<Configure>",draw)
 
@@ -2560,7 +2561,9 @@ class App:
         s.configure('LoginBrand.TLabel',background=t['bg'],foreground=t['fg'],font=(FF,scaled_font(16),'bold'))
         s.configure('AtelierBrand.TLabel',background=t['side'],foreground=t['fg'],font=(FF,scaled_font(15),'bold'))
         s.configure('AtelierDetailTitle.TLabel',background=t['panel'],foreground=t['fg'],font=(FF,scaled_font(20),'bold'))
-        s.configure('AtelierHero.TLabel',background=t['bg'],foreground=t['fg'],font=(FF,scaled_font(26),'bold'))
+        s.configure('AtelierHero.TLabel',background=t['panel'],foreground=t['fg'],font=(FF,scaled_font(28)))
+        s.configure('AtelierEyebrow.TLabel',background=t['panel'],foreground=t['accent'],font=(FF,scaled_font(8),'bold'))
+        s.configure('AtelierSubtitle.TLabel',background=t['panel'],foreground=t['muted'],font=(FF,scaled_font(10)))
         s.configure('Atelier.TMenubutton',background=t['side'],foreground=t['muted'],padding=(8,6),borderwidth=0,relief='flat',arrowcolor=t['muted'])
         s.map('Atelier.TMenubutton',background=[('active',t['hover'])])
         s.configure("HeroMuted.TLabel", background=t["bg"], foreground=t["muted"], font=(FF, scaled_font(10)))
@@ -3284,16 +3287,17 @@ class App:
         scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
         font_size=max(9,min(14,int(self.settings.get("font_size") or 10)))
         compact=self.root.winfo_width()/scale<820
+        tight=self.root.winfo_height()/scale<600
         self.compact=compact;self.atelier_layout=True
         f=ttk.Frame(self.root);self._swap(f)
-        head=self.atelier_header=ttk.Frame(f,style="Side.TFrame",padding=(26,16))
+        head=self.atelier_header=ttk.Frame(f,style="Side.TFrame",padding=(26,8 if tight else 12))
         head.pack(fill="x")
         if self.icon:
             self.atelier_logo=self.icon.zoom(max(1,round(38*scale/8))).subsample(8)
             ttk.Label(head,image=self.atelier_logo,style="Side.TLabel").pack(side="left",padx=(0,12))
         brand=ttk.Frame(head,style="Side.TFrame");brand.pack(side="left")
         ttk.Label(brand,text="Bitora",style="AtelierBrand.TLabel").pack(anchor="w")
-        ttk.Label(brand,text="Paswword Manager",style="SideMuted.TLabel").pack(anchor="w")
+        if not tight:ttk.Label(brand,text="Paswword Manager",style="SideMuted.TLabel").pack(anchor="w")
         IconButton(head,tr('Заблокировать'),self.lock,dict(t,bg=t['side']),'lock',scale).pack(side='right',padx=(12,0))
         menu=self._menu()
         menu.add_cascade(label=tr("Файл"),menu=self._file_menu())
@@ -3313,24 +3317,48 @@ class App:
                 kind="rail",icon=icon,width=rail_width,height=58 if compact else 42,scale=scale,
                 font_size=9 if compact else font_size,vertical=compact,align="left")
             btn.pack(fill="x",pady=3);self.rail_buttons[value]=btn
-        DesignButton(self.rail,tr("Категории"),self.toggle_sidebar,t,kind="rail",icon="folder",
-            width=rail_width,height=58 if compact else 38,scale=scale,font_size=9 if compact else font_size,vertical=compact,align="left").pack(fill="x",pady=(14,4))
+        if compact:
+            DesignButton(self.rail,tr("Категории"),self.toggle_sidebar,t,kind="rail",icon="folder",
+                width=rail_width,height=58,scale=scale,font_size=9,vertical=True).pack(fill="x",pady=(14,4))
+        else:
+            category_heading=ttk.Frame(self.rail,style="Side.TFrame")
+            category_heading.pack(fill="x",padx=8,pady=(24,4))
+            category_title=ttk.Label(category_heading,text=tr("КАТЕГОРИИ"),style="SideHeading.TLabel",cursor="hand2")
+            category_title.pack(side="left")
+            category_title.bind("<Button-1>",lambda event:self.toggle_sidebar())
+            IconButton(category_heading,tr("Управление категориями"),lambda:feature_dialogs.categories(self),dict(t,bg=t['side']),'plus',scale).pack(side="right")
         DesignButton(self.rail,tr("Настройки"),lambda:SettingsDialog(self,self.root),t,kind="rail",icon="settings",
             width=rail_width,height=58 if compact else 42,scale=scale,font_size=9 if compact else font_size,vertical=compact,align="left").pack(side="bottom",fill="x",pady=(16,0))
+        self.password_health=None
+        if not compact:
+            self.password_health=PasswordHealth(self.rail,t,scale,tr("Аудит паролей"),tr("Добавьте первую запись"),self.audit)
+            self.password_health.pack(side="bottom",fill="x",padx=4,pady=(12,8))
         f=ttk.Frame(shell);f.pack(side="left",fill="both",expand=True)
-        hero=ttk.Frame(f,padding=(28,26,28,18));hero.pack(fill="x")
-        self.atelier_add=DesignButton(hero,tr("Новая запись"),self.add,t,kind="primary",icon="plus",height=42,scale=scale,font_size=font_size)
-        self.atelier_add.pack(side="right",pady=5)
-        ttk.Label(hero,text=tr("ЛИЧНОЕ ПРОСТРАНСТВО"),style="Eyebrow.TLabel").pack(anchor="w",pady=(0,6))
+        self.atelier_hero=AtelierBackdrop(f,t,scale,compact=tight)
+        self.atelier_hero.pack(fill="x",padx=28,pady=(10,8) if tight else (22,18))
+        hero=self.atelier_hero.body
+        self.atelier_add=DesignButton(hero,tr("Новая запись"),self.add,dict(t,bg=t["panel"]),kind="primary",icon="plus",height=32 if tight else 42,scale=scale,font_size=font_size)
+        self.atelier_add.pack(side="right",padx=(18,0),pady=0 if tight else 18)
+        if not tight:ttk.Label(hero,text=tr("ЛИЧНОЕ ПРОСТРАНСТВО"),style="AtelierEyebrow.TLabel").pack(anchor="w",pady=(0,6))
         self.atelier_title=ttk.Label(hero,text=tr("Ваше хранилище"),style="AtelierHero.TLabel")
+        if tight:self.atelier_title.configure(font=(FF,max(16,round(19*font_size/10))))
         self.atelier_title.pack(anchor="w")
+        self.atelier_subtitle=ttk.Label(hero,text=tr("Аккаунты, пароли и коды подтверждения."),style="AtelierSubtitle.TLabel")
+        if not tight:self.atelier_subtitle.pack(anchor="w",pady=(8,0))
+        def fit_hero(event):
+            available=max(90,event.width-self.atelier_add.winfo_reqwidth()-24)
+            self.atelier_title.configure(wraplength=available)
+            self.atelier_subtitle.configure(wraplength=available)
+        hero.bind("<Configure>",fit_hero)
         overview=ttk.Frame(f);self._build_stats(overview)
         self.search=tk.StringVar();self.search.trace_add("write",lambda *args:self.refresh_list())
         self.atelier_search=SearchField(f,self.search,t,scale,font_size,tr("Найти запись…"))
         self.atelier_search.pack(fill="x",padx=28,pady=(0,10))
+        if tight:self.atelier_search.configure(height=int(38*scale))
         self.search_entry=self.atelier_search.entry
         controls=ttk.Frame(f,padding=(28,0));controls.pack(fill="x")
         self.category_chips=ttk.Frame(controls);self.category_chips.pack(side="left")
+        if tight:controls.pack_forget()
         self.category_chips_key=None
         controls.bind("<Configure>",lambda event:self.refresh_category_chips())
         bottom=ttk.Frame(f,padding=(28,10));bottom.pack(side="bottom",fill="x")
@@ -3342,8 +3370,9 @@ class App:
         side_fr=self.side_panel=ttk.Frame(body if compact else self.rail,style="Side.TFrame",width=rail_width)
         if not compact:side_fr.pack(fill="both",expand=True,pady=(4,0))
         navigation=ttk.Frame(side_fr,style="Side.TFrame");navigation.pack(fill="both",expand=True)
-        self.side=ttk.Treeview(navigation,show="tree",selectmode="browse",style="Side.Treeview")
-        self.side.column("#0",width=max(100,rail_width-24),minwidth=60)
+        self.side=ttk.Treeview(navigation,columns=("count",),show="tree",selectmode="browse",style="Side.Treeview")
+        self.side.column("#0",width=max(100,rail_width-62),minwidth=60)
+        self.side.column("count",width=int(28*scale),minwidth=20,stretch=False,anchor="e")
         self.side.tag_configure("head",foreground=t["muted"],font=(FF,max(8,font_size-2)))
         self.side.pack(side="left",fill="both",expand=True,padx=(0,4))
         nav_scroll=ttk.Scrollbar(navigation,orient="vertical",command=self.side.yview)
@@ -3362,11 +3391,18 @@ class App:
         self.library_picker.pack(side="right",padx=(8,0))
         self.library_picker.bind("<<ComboboxSelected>>",lambda event:self.set_library_filter(self.library_choices[self.library_filter.get()]))
         utilities=ttk.Frame(center,padding=(4,0,4,8));utilities.pack(fill="x")
+        ttk.Label(utilities,text=tr("ЗАПИСИ"),style="Eyebrow.TLabel").pack(side="left",padx=(4,10))
         self.list_count=ttk.Label(utilities,text="",style="BgMuted.TLabel");self.list_count.pack(side="left")
         IconButton(utilities,tr('Фильтры'),self.toggle_filters,t,'filter',scale).pack(side='right')
         IconButton(utilities,tr('Сортировка'),lambda:self.sort_by('title'),t,'sort',scale).pack(side='right',padx=8)
-        lst = ttk.Frame(center)
-        lst.pack(fill="both", expand=True)
+        self.list_surface=RoundedCard(center,t,padding=(8,8),radius=18)
+        self.list_surface.pack(fill="both",expand=True)
+        # Unlike a form card, the collection surface fills all available height.
+        self.list_surface.canvas.pack_configure(fill="both",expand=True)
+        lst = self.list_surface.body
+        def size_collection(event):
+            self.list_surface.canvas.itemconfigure(self.list_surface.window,height=max(40,event.height-16))
+        self.list_surface.canvas.bind("<Configure>",size_collection,add="+")
         cols = [c[0] for c in self.COLUMNS]
         horizontal = ttk.Scrollbar(lst, orient="horizontal")
         self.tree = RecordModel(lst, columns=cols, displaycolumns=("fav","title","login"), show="headings", selectmode="extended")
@@ -3377,7 +3413,7 @@ class App:
             minimum = max(width, column_font.measure(name) + 32)
             self.tree.column(key, width=minimum, minwidth=minimum, anchor="center" if key == "fav" else "w",
                              stretch=(key != "fav"))
-        self.record_view=RecordList(lst,self.tree,self.vault,t,scale,font_size,self.edit,self.delete,self.context_menu,self.copy_login,self.copy_password)
+        self.record_view=RecordList(lst,self.tree,self.vault,dict(t,bg=t["panel"]),scale,font_size,self.edit,self.delete,self.context_menu,self.copy_login,self.copy_password)
         sb=ttk.Scrollbar(lst,orient="vertical",command=self.record_view.yview)
         self.record_view.yscroll_callback=sb.set
         self.record_view.pack(side="left",fill="both",expand=True)
@@ -3405,8 +3441,8 @@ class App:
         detail_scroll.pack(side="right", fill="y")
         detail_canvas.pack(side="left", fill="both", expand=True)
         detail_canvas.configure(yscrollcommand=detail_scroll.set)
-        detail_surface=RoundedCard(detail_canvas,t)
-        detail_content = ttk.Frame(detail_surface.body, style="Panel.TFrame", padding=4)
+        detail_surface=RoundedCard(detail_canvas,t,padding=(int(22*scale),int(20*scale)),radius=int(20*scale))
+        detail_content = ttk.Frame(detail_surface.body, style="Panel.TFrame", padding=0)
         detail_content.pack(fill="x")
         detail_window = detail_canvas.create_window((0, 0), window=detail_surface, anchor="nw")
         detail_canvas.bind("<Configure>", lambda event: detail_canvas.itemconfigure(
@@ -3694,6 +3730,10 @@ class App:
 
     def refresh_stats(self):
         t, s = self.t, self.vault.summary()
+        health=getattr(self,"password_health",None)
+        if health and health.winfo_exists():
+            caption=(str(s["score"])+tr(" / 100 · Состояние паролей")) if s["total"] else tr("Добавьте первую запись")
+            health.update_summary(s,caption)
         self.stat["total"].config(text=str(s["total"]))
         for key in ("weak", "reused", "old"):
             bad = t["warn"] if key == "old" else t["bad"]
@@ -3710,7 +3750,7 @@ class App:
         p.columnconfigure(0, weight=1)
         header=ttk.Frame(p,style="Panel.TFrame");header.grid(row=0,column=0,sticky="we",pady=(4,22))
         scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
-        self.d_avatar=tk.Canvas(header,width=int(48*scale),height=int(48*scale),bg=self.t["panel"],highlightthickness=0)
+        self.d_avatar=tk.Canvas(header,width=int(56*scale),height=int(56*scale),bg=self.t["panel"],highlightthickness=0)
         self.d_avatar.pack(side="left",padx=(0,12))
         heading=ttk.Frame(header,style="Panel.TFrame");heading.pack(side="left",fill="x",expand=True)
         self.d_title=ttk.Label(heading,text="",style="AtelierDetailTitle.TLabel",wraplength=250,justify="left");self.d_title.pack(anchor="w")
@@ -3726,7 +3766,7 @@ class App:
                 ("source", tr('ИСТОЧНИК'), ()), ("updated", tr('ИЗМЕНЕНО'), ()))
         for i, (key, text, btns) in enumerate(spec, start=1):
             palette=dict(self.t,bg=self.t["panel"],panel=self.t["card"])
-            fr=RoundedCard(p,palette)
+            fr=RoundedCard(p,palette,padding=(int(13*scale),int(9*scale)),radius=int(12*scale))
             fr.body.configure(style="Card.TFrame")
             caption={'login':tr('Логин'),'password':tr('Пароль'),'totp':tr('Код подтверждения')}.get(key,tr(text))
             ttk.Label(fr.body,text=caption,style="CardMuted.TLabel",font=(FF,9)).pack(anchor="w")
@@ -3743,7 +3783,7 @@ class App:
             if key=="password":
                 self.pw_bar=ttk.Progressbar(fr.body,maximum=100)
                 self.pw_bar_lbl=ttk.Label(fr.body,text="",style="CardMuted.TLabel")
-            fr.grid(row=i,column=0,sticky="we",pady=6)
+            fr.grid(row=i,column=0,sticky="we",pady=4)
             self.dvars[key],self.dfields[key]=var,fr
 
         cf = ttk.Frame(p, style="Panel.TFrame")
@@ -3814,8 +3854,9 @@ class App:
         self.d_domain.config(text=hostname(e["url"]))
         self.d_avatar.delete("all")
         aw=max(48,self.d_avatar.winfo_reqwidth())
-        rounded(self.d_avatar,0,0,aw,aw,12,self.t["card"],self.t['border'])
-        self.d_avatar.create_text(aw/2,aw/2,text=(e["title"].strip()[:1] or "?").upper(),font=(FF,18,"bold"),fill=self.t["accent"])
+        avatar_bg,avatar_fg=monogram_colors(e["title"],self.t)
+        rounded(self.d_avatar,0,0,aw,aw,aw/3,avatar_bg)
+        self.d_avatar.create_text(aw/2,aw/2,text=(e["title"].strip()[:1] or "?").upper(),font=(FF,21),fill=avatar_fg)
         values = {"url": e["url"], "login": e["login"], "category": e["category"],
                   "tags": e["tags"], "source": e["source"],
                   "updated": e["updated"][:10]}
@@ -3931,15 +3972,15 @@ class App:
                 if self.theme_name=="dark":color=dict(zip(COLORS,("#409cff","#b398ff","#5bd68a","#ffa45c","#ff8293","#bbbcc5"))).get(color,color)
                 icon=props.get("icon") if props.get("icon") in ICONS else "◇"
                 self.side.tag_configure("cat:"+c,foreground=color)
-                ins("", "end", iid="cat:" + c, text=f"  {icon}   {c}  ({n})",tags=("cat:"+c,))
+                ins("", "end", iid="cat:" + c, text=f"  {icon}   {c}",values=(n,),tags=("cat:"+c,))
             if unc:
-                ins("", "end", iid="uncat", text=f"{tr('  —   Без категории  (')}{unc})")
+                ins("", "end", iid="uncat", text="  —   "+tr("Без категории"),values=(unc,))
         tags = sorted({x for e in act for x in split_tags(e["tags"])}, key=str.lower)
         if tags:
             ins("", "end", iid="h_tag", text=tr('   ТЕГИ'), tags=("head",))
             for tg in tags:
                 n = sum(1 for e in act if tg.lower() in [x.lower() for x in split_tags(e["tags"])])
-                ins("", "end", iid="tag:" + tg, text=f"  #   {tg}  ({n})")
+                ins("", "end", iid="tag:" + tg, text=f"  #   {tg}",values=(n,))
         if not getattr(self,'atelier_layout',False):
             ins("", "end", iid="h_sys", text=tr('   СИСТЕМА'), tags=("head",))
             ins("", "end", iid="trash", text=f"{tr('  ⌫   Корзина  (')}{len(v.trash())})")
