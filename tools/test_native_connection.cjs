@@ -19,7 +19,7 @@ const path=require('path');
     await page.goto(`chrome-extension://${id}/popup.html`);
     const response=await page.evaluate(host=>chrome.runtime.sendNativeMessage(host,{action:'ping'}),
       process.env.NATIVE_HOST||'ru.moiparoli.host');
-    if(!response.ok||response.version!==(process.env.EXPECT_HOST_VERSION||'4.5.2')||!response.supports.includes('save_credentials'))
+    if(!response.ok||response.version!==(process.env.EXPECT_HOST_VERSION||'4.5.3')||!response.supports.includes('save_credentials'))
       throw new Error('Unexpected installed native host response: '+JSON.stringify(response));
     console.log('Installed extension connected to the real packaged native host: '+response.version);
   } finally {

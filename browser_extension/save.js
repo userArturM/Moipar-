@@ -16,7 +16,7 @@ saveButton.addEventListener('click',async()=>{
     if(url.protocol!=='https:')throw Error('Откройте HTTPS-страницу с формой входа.');
     const [read]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{
   function capture(scope=document,remembered='') {
-    const fields=[...scope.querySelectorAll('input')].filter(e=>!e.disabled&&e.getClientRects().length>0);
+    const fields=[...scope.querySelectorAll('input')].filter(e=>!e.disabled&&e.getClientRects().length>0&&!e.autocomplete.toLowerCase().split(/\s+/).some(token=>token.startsWith('cc-')));
     const has=(e,token)=>e.autocomplete.toLowerCase().split(/\s+/).includes(token);
     const passwords=fields.filter(e=>!has(e,'one-time-code')&&!/otp|verification.?code|auth.?code/i.test(e.name+' '+e.id)&&(e.type==='password'||has(e,'new-password')||has(e,'current-password')));
     const active=passwords.includes(document.activeElement)?document.activeElement:null;

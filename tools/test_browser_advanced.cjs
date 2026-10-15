@@ -46,6 +46,12 @@ const vm=require('vm');
     await page.setContent('<input id=visiblePassword type=text autocomplete=current-password value="ShownFake!789">');
     read=await page.evaluate(()=>window.MoiParoliCapture());
     assert.equal(read.credentials.password,'ShownFake!789');assert.equal(read.credentials.login,'');
-    console.log('Advanced forms passed: registration, password change, ambiguous forms, two-step username, JavaScript button');
+    await page.setContent('<form><input autocomplete="cc-number" value="4111111111111111"><input type=password autocomplete="section-payment cc-csc" value="123"></form>');
+    read=await page.evaluate(()=>window.MoiParoliCapture());
+    assert.equal(read.credentials.password,'');assert.equal(read.credentials.login,'');
+    await page.locator('input').evaluateAll(nodes=>nodes.forEach(node=>node.value=''));
+    await fill();
+    assert.deepEqual(await page.locator('input').evaluateAll(nodes=>nodes.map(node=>node.value)),['','']);
+    console.log('Advanced forms passed: registration, password change, ambiguous forms, two-step username, JavaScript button, payment field exclusion');
   } finally {await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -54,7 +54,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Мои пароли"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.5.2"
+APP_VERSION = "4.5.3"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -1428,6 +1428,49 @@ def _new_top(app, parent, title):
     return top
 
 
+def _centered_scroll_card(parent, palette):
+    """Keep login/create controls reachable at large Windows text scales."""
+    shell=ttk.Frame(parent)
+    shell.place(relx=.5,rely=.54,relwidth=.74,relheight=.76,anchor='center')
+    canvas=tk.Canvas(shell,bg=palette['bg'],highlightthickness=0)
+    bar=ttk.Scrollbar(shell,orient='vertical',command=canvas.yview)
+    bar.pack(side='right',fill='y')
+    canvas.pack(side='left',fill='both',expand=True)
+    canvas.configure(yscrollcommand=bar.set)
+    card=ttk.Frame(canvas,style='Panel.TFrame',padding=(32,24))
+    window=canvas.create_window((0,0),window=card,anchor='n')
+    def arrange(event=None):
+        if not canvas.winfo_exists():return
+        width=max(1,canvas.winfo_width())
+        height=max(1,canvas.winfo_height())
+        canvas.itemconfigure(window,width=min(card.winfo_reqwidth(),width))
+        needed=card.winfo_reqheight()
+        canvas.coords(window,width/2,max(0,(height-needed)/2))
+        canvas.configure(scrollregion=(0,0,width,max(height,needed)))
+    card.bind('<Configure>',arrange)
+    canvas.bind('<Configure>',arrange)
+    root=parent.winfo_toplevel()
+    def inside(widget):return widget is canvas or str(widget).startswith(str(card)+'.')
+    def reveal(event):
+        if not inside(event.widget) or not card.winfo_exists():return
+        y=canvas.coords(window)[1]+event.widget.winfo_rooty()-card.winfo_rooty()
+        start=canvas.canvasy(0)
+        if y<start or y+event.widget.winfo_height()>start+canvas.winfo_height():
+            extent=max(canvas.winfo_height(),card.winfo_reqheight())
+            canvas.yview_moveto(max(0,(y-12)/max(1,extent)))
+    def wheel(event):
+        if inside(event.widget):canvas.yview_scroll(-int(event.delta/120),'units');return 'break'
+    focus_binding=root.bind('<FocusIn>',reveal,add='+')
+    wheel_binding=root.bind('<MouseWheel>',wheel,add='+')
+    def cleanup(event):
+        if event.widget is parent:
+            root.unbind('<FocusIn>',focus_binding)
+            root.unbind('<MouseWheel>',wheel_binding)
+    parent.bind('<Destroy>',cleanup,add='+')
+    card.scroll_canvas=canvas
+    return card
+
+
 def _scroll_dialog_body(top, padding=20):
     """Keep larger fonts and keyboard-focused controls accessible on small screens."""
     shell = ttk.Frame(top)
@@ -1460,6 +1503,11 @@ def _scroll_dialog_body(top, padding=20):
             canvas.yview_moveto(max(0,(y-12)/height))
     top.resizable(True,True)
     top.bind("<FocusIn>",reveal,add="+")
+    def wheel(event):
+        if event.widget is canvas or str(event.widget).startswith(str(frame)+'.'):
+            canvas.yview_scroll(-int(event.delta/120),'units')
+            return 'break'
+    top.bind('<MouseWheel>',wheel,add='+')
     top.after_idle(fit)
     return frame
 
@@ -2927,8 +2975,8 @@ class App:
         self._swap(f)
         ttk.Label(f, text=tr('◈  Мои пароли'), style="Hero.TLabel").place(x=40, y=32)
         ttk.Label(f, text=tr('Личное пространство для ваших доступов'), style="HeroMuted.TLabel").place(x=42, y=80)
-        card = ttk.Frame(f, style="Panel.TFrame", padding=(48, 36))
-        card.place(relx=0.5, rely=0.46, anchor="center")
+        card = _centered_scroll_card(f,t)
+        self.login_card=card
         if self.icon:
             ttk.Label(card, image=self.icon, style="Panel.TLabel").pack()
         ttk.Label(card, text=tr('Начнём с защиты') if new else tr('С возвращением'), style="Title.TLabel").pack(pady=(10, 0))

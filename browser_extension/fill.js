@@ -1,7 +1,8 @@
 globalThis.MoiParoliFill = (login, password, expectedOrigin) => {
         if (location.origin !== expectedOrigin || window !== window.top) return false;
         const candidates = [...document.querySelectorAll('input')].filter(el =>
-          !el.disabled && !el.readOnly && el.getClientRects().length > 0);
+          !el.disabled && !el.readOnly && el.getClientRects().length > 0 &&
+          !el.autocomplete.toLowerCase().split(/\s+/).some(token=>token.startsWith('cc-')));
         const has=(el,token)=>el.autocomplete.toLowerCase().split(/\s+/).includes(token);
         const pass=candidates.find(el=>has(el,'current-password'))||
           candidates.find(el=>el.type==='password'&&!has(el,'new-password'));

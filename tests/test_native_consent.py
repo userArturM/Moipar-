@@ -29,15 +29,17 @@ class NativeConsentTests(unittest.TestCase):
                     root.destroy()
                     return
                 entries=[]
+                buttons=[]
                 def walk(widget):
                     for child in widget.winfo_children():
                         if isinstance(child,ttk.Entry): entries.append(child)
+                        if isinstance(child,ttk.Button): buttons.append(child)
                         walk(child)
                 walk(root)
                 entries[0].insert(0,"Wrong" if mode=="wrong" else "NativeConsentTest!789")
                 if mode=="wrong":root.after(300,root.destroy)
                 root.after(150,choose)
-                next(w for w in root.winfo_children() if isinstance(w,ttk.Button)).invoke()
+                next(w for w in buttons if w.cget('text')=='Разрешить однократное заполнение').invoke()
             def choose():
                 for child in root.winfo_children():
                     if isinstance(child,tk.Toplevel):

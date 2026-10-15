@@ -101,7 +101,7 @@ def select_record(host):
     # Imported lazily so native protocol tests do not require a display.
     import tkinter as tk
     from tkinter import ttk, messagebox
-    from moi_paroli import Vault, Settings, data_dir, VaultError, App
+    from moi_paroli import Vault, Settings, data_dir, VaultError, App, _scroll_dialog_body
     from types import SimpleNamespace
 
     root = tk.Tk()
@@ -116,11 +116,10 @@ def select_record(host):
     appearance = SimpleNamespace(root=root, settings=settings)
     App.apply_theme(appearance)
     result = {'ok': False, 'error': tr('Отменено пользователем')}
-    ttk.Label(root, text=tr('Запрос пароля для сайта:'), font=('Segoe UI', 11)).pack(pady=(16, 3))
-    ttk.Label(root, text=host, font=('Segoe UI', 12, 'bold')).pack()
-    ttk.Label(root, text=tr('Проверьте адрес сайта перед подтверждением.')).pack(pady=8)
-    frame = ttk.Frame(root)
-    frame.pack(fill='x', padx=24)
+    frame = _scroll_dialog_body(root,24)
+    ttk.Label(frame, text=tr('Запрос пароля для сайта:'), font=('Segoe UI', 11)).pack(pady=(16, 3))
+    ttk.Label(frame, text=host, font=('Segoe UI', 12, 'bold')).pack()
+    ttk.Label(frame, text=tr('Проверьте адрес сайта перед подтверждением.')).pack(pady=8)
     ttk.Label(frame, text=tr('Хранилище:') + '\n' + path, wraplength=550).pack(anchor='w', pady=(0, 10))
     ttk.Label(frame, text=tr('Мастер-пароль:')).pack(anchor='w')
     password = ttk.Entry(frame, show='•')
@@ -133,8 +132,8 @@ def select_record(host):
     keypath = ttk.Entry(frame)
     keypath.pack(fill='x')
 
-    ttk.Label(root, text=tr('Если есть несколько аккаунтов, выберите один после разблокировки.')).pack(pady=(8, 0))
-    status = ttk.Label(root, text='', wraplength=550)
+    ttk.Label(frame, text=tr('Если есть несколько аккаунтов, выберите один после разблокировки.')).pack(pady=(8, 0))
+    status = ttk.Label(frame, text='', wraplength=550)
     status.pack(padx=24, pady=8)
 
     def confirm(master_password=None):
@@ -192,10 +191,10 @@ def select_record(host):
             if finished:
                 root.destroy()
 
-    approve = ttk.Button(root, text=tr('Разрешить однократное заполнение'), command=confirm)
+    approve = ttk.Button(frame, text=tr('Разрешить однократное заполнение'), command=confirm)
     approve.pack(pady=8)
-    add_hello_button(root, root, path, confirm, status, approve)
-    ttk.Button(root, text=tr('Отмена'), command=root.destroy).pack(pady=6)
+    add_hello_button(root, frame, path, confirm, status, approve)
+    ttk.Button(frame, text=tr('Отмена'), command=root.destroy).pack(pady=6)
     root.bind('<Return>', lambda _: confirm())
     root.mainloop()
     return result
@@ -305,7 +304,7 @@ def save_record(host,candidate):
 
 def handle(msg, selector=select_record, saver=save_record):
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.5.2","supports":["get_credentials","save_credentials"]}
+        return {"ok":True,"version":"4.5.3","supports":["get_credentials","save_credentials"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)

@@ -79,6 +79,18 @@ jobs:
         run: python tools/test_installer.py
       - name: Package complete portable application
         run: python tools/package_portable.py
+      - name: Prepare store submission package
+        shell: pwsh
+        run: |
+          python tools/package_store.py store_package
+          node tools/store_artwork.cjs store_package
+          Compress-Archive -Path store_package/* -DestinationPath MoiParoli-store-kit.zip
+      - name: Upload store submission package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoiParoli-store-kit
+          path: store_package/**
+          if-no-files-found: error
       - name: Upload browser integration
         uses: actions/upload-artifact@v4
         with:
@@ -125,10 +137,10 @@ jobs:
           $tag = "v$version"
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip dist/BUILD_MANIFEST.json --clobber
+            gh release upload $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip dist/BUILD_MANIFEST.json --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed' }
           } else {
-            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Мои пароли $version" --notes-file RELEASE_NOTES.md
+            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Мои пароли $version" --notes-file RELEASE_NOTES.md
             if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
           }
 

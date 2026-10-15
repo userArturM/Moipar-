@@ -53,6 +53,31 @@ class DesktopTests(unittest.TestCase):
         self.app.set_language('ru')
         self.assertEqual(self.app.tree.heading('category')['text'],'Категория')
 
+    def test_login_card_scrolls_at_large_scales_in_both_languages(self):
+        self.app.lock()
+        original=self.app.vault.path
+        for new in (False,True):
+            self.app.vault.path=os.path.join(self.tmp.name,'missing.dat') if new else original
+            for language in ('ru','en'):
+                self.app.set_language(language)
+                for scale in (125,150,175,200):
+                    with self.subTest(new=new,language=language,scale=scale):
+                        self.app.root.tk.call('tk','scaling',scale/100*96/72)
+                        self.app.apply_theme();self.app.show_login();self.app.root.update()
+                        card=self.app.login_card;canvas=card.scroll_canvas
+                        self.assertGreater(canvas.winfo_height(),100)
+                        self.assertGreaterEqual(card.winfo_y(),0)
+                        extent=list(map(float,canvas.cget('scrollregion').split()))
+                        self.assertGreaterEqual(extent[3],card.winfo_reqheight())
+                        buttons=[w for w in card.winfo_children() if isinstance(w,m.ttk.Button)]
+                        last=buttons[-1]
+                        last.event_generate('<FocusIn>');self.app.root.update()
+                        top=last.winfo_rooty()-canvas.winfo_rooty()
+                        self.assertGreaterEqual(top,0)
+                        self.assertLessEqual(top+last.winfo_height(),canvas.winfo_height()+2)
+        self.app.vault.path=original
+        self.app.set_language('ru')
+
     def test_new_feature_dialogs_and_collapsible_sidebar(self):
         import feature_dialogs
         self.app.toggle_sidebar()
