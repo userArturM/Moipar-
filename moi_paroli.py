@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora password 4.6.0 — менеджер личных паролей для Windows.
+Bitora password 4.6.1 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -50,12 +50,13 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 try:
     import tkinter as tk
     from tkinter import ttk, messagebox, simpledialog, filedialog
+    from midnight_ui import DesignButton,RecordModel,RecordList,rounded
 except ImportError:  # tkinter нужен только для окна
     tk = ttk = messagebox = simpledialog = filedialog = None
 
 APP_NAME = "Bitora password"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.6.0"
+APP_VERSION = "4.6.1"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -2497,6 +2498,17 @@ class App:
                     bordercolor=t["border"], lightcolor=t["border"], darkcolor=t["border"],
                     troughcolor=t["border"], focuscolor=t["accent"], font=(FF, scaled_font(10)))
         s.configure("TFrame", background=t["bg"])
+        s.configure("Eyebrow.TLabel",background=t["bg"],foreground=t["muted"],font=(FF,scaled_font(9)))
+        s.configure("Header.TMenubutton",background=t["panel"],foreground=t["muted"],padding=(6,5),borderwidth=0,relief="flat",arrowcolor=t["muted"])
+        s.map("Header.TMenubutton",background=[("active",t["hover"])])
+        s.configure("MidnightSearch.TEntry",fieldbackground=t["card"],foreground=t["fg"],borderwidth=0,padding=(6,8),relief="flat")
+        s.configure("Quiet.TButton",background=t["bg"],foreground=t["muted"],borderwidth=0,padding=(6,4),relief="flat")
+        s.map("Quiet.TButton",background=[("active",t["hover"])])
+        s.configure("TextAction.TButton",background=t["card"],foreground=t["accent"],bordercolor=t["card"],borderwidth=0,padding=(4,4),relief="flat",font=(FF,scaled_font(9)))
+        s.map("TextAction.TButton",background=[("active",t["hover"])],foreground=[("active",t["accent"])])
+        s.configure("DetailAction.TButton",background=t["panel"],foreground=t["fg"],bordercolor=t["border"],padding=(10,7),font=(FF,scaled_font(9)))
+        s.configure("CardMono.TLabel",background=t["card"],foreground=t["fg"],font=(MONO,scaled_font(10)))
+
         s.configure("Section.TLabel", background=t["panel"], foreground=t["fg"], font=(FF, scaled_font(13), "bold"))
         s.configure("DetailCaption.TLabel", background=t["panel"], foreground=t["muted"], font=(FF, scaled_font(10)))
         s.configure("Compact.TButton", padding=(10, 5))
@@ -3216,36 +3228,48 @@ class App:
         self._swap(f)
 
         shell=f
-        self.rail=ttk.Frame(shell,style="Side.TFrame",padding=(8,18),width=108)
+        scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
+        font_size=max(9,min(14,int(self.settings.get("font_size") or 10)))
+        rail_height=max(46,min(68,(self.root.winfo_height()-100*scale)/(6*scale)))
+        rail_width=int(max(80,80*font_size/10)*scale)
+        self.rail=ttk.Frame(shell,style="Side.TFrame",padding=(7,18))
         self.rail.pack(side="left",fill="y")
-        if self.logo:ttk.Label(self.rail,image=self.logo,style="Side.TLabel").pack(pady=(0,18))
+        if self.logo:ttk.Label(self.rail,image=self.logo,style="Side.TLabel").pack(pady=(0,20))
         self.rail_buttons={}
-        for value,symbol,label in (("all","▤",tr("Записи")),("fav","★",tr("Избранное")),("trash","⌫",tr("Корзина"))):
-            button=ttk.Button(self.rail,text=symbol+"\n"+label,style="Rail.TButton",width=11,
-                command=lambda selected=value:self.set_library_filter(selected))
+        for value,icon,label in (("all","key",tr("Записи")),("fav","star",tr("Избранное")),("trash","trash",tr("Корзина"))):
+            button=DesignButton(self.rail,label,lambda selected=value:self.set_library_filter(selected),t,
+                kind="rail",icon=icon,width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True)
             button.pack(fill="x",pady=4);self.rail_buttons[value]=button
-        ttk.Button(self.rail,text="▦\n"+tr("Категории"),style="Rail.TButton",width=11,command=self.toggle_sidebar).pack(fill="x",pady=4)
-        ttk.Button(self.rail,text="◎\n"+tr("Браузеры"),style="Rail.TButton",width=11,command=lambda:BrowserDialog(self,self.root)).pack(fill="x",pady=4)
-        ttk.Button(self.rail,text="⚙\n"+tr("Настройки"),style="Rail.TButton",width=11,command=lambda:SettingsDialog(self,self.root)).pack(side="bottom",fill="x",pady=4)
+        DesignButton(self.rail,tr("Категории"),self.toggle_sidebar,t,kind="rail",icon="folder",width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True).pack(fill="x",pady=4)
+        DesignButton(self.rail,tr("Браузеры"),lambda:BrowserDialog(self,self.root),t,kind="rail",icon="browser",width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True).pack(fill="x",pady=4)
+        DesignButton(self.rail,tr("Настройки"),lambda:SettingsDialog(self,self.root),t,kind="rail",icon="settings",width=rail_width,height=rail_height,scale=scale,font_size=round(9*font_size/10),vertical=True).pack(side="bottom",fill="x",pady=4)
         f=ttk.Frame(shell);f.pack(side="left",fill="both",expand=True)
-        head = ttk.Frame(f, style="Panel.TFrame", padding=(24, 14))
-        head.pack(fill="x")
-        ttk.Label(head,text=APP_NAME,style="Title.TLabel").pack(side="left",padx=(0,20))
-        menus = ttk.Frame(f, style="Panel.TFrame", padding=(24, 0, 24, 8))
-        menus.pack(fill="x")
-        for text, menu in ((tr('Файл'), self._file_menu()), (tr('Инструменты'), self._tools_menu()),
-                           (tr('Справка'), self._help_menu())):
-            ttk.Menubutton(menus, text=tr(text), menu=menu).pack(side="left", padx=3)
-        ttk.Button(head, text=tr('Заблокировать'), command=self.lock).pack(side="right")
-        ttk.Button(head, text=tr('Тема'), command=self.toggle_theme).pack(side="right", padx=8)
+        head=ttk.Frame(f,style="Panel.TFrame",padding=(24,14));head.pack(fill="x")
+        ttk.Label(head,text=tr("Личное хранилище"),style="Section.TLabel").pack(side="left")
+        for text,menu in ((tr("Файл"),self._file_menu()),(tr("Инструменты"),self._tools_menu()),(tr("Справка"),self._help_menu())):
+            ttk.Menubutton(head,text=text,menu=menu,style="Header.TMenubutton").pack(side="right",padx=3)
+        self.hello_status=ttk.Label(head,text="Windows Hello" if self.hello.enabled() else tr("Хранилище открыто"),style="Muted.TLabel")
+        self.hello_status.pack(side="right",padx=18)
 
         hero = ttk.Frame(f, padding=(24, 18))
         hero.pack(fill="x")
-        ttk.Button(hero, text=tr('＋  Добавить пароль'), style="Accent.TButton",
-                   command=self.add).pack(side="right", pady=8)
-        ttk.Label(hero, text=tr('Записи'), style="Hero.TLabel").pack(anchor="w")
-        overview = ttk.Frame(f, padding=(24, 0))
+        DesignButton(hero,tr("Новая запись"),self.add,t,kind="primary",icon="plus",height=40,scale=scale,font_size=font_size).pack(side="right",pady=8)
+        ttk.Label(hero,text="BITORA PASSWORD",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,5))
+        ttk.Label(hero,text=tr("Записи"),style="Hero.TLabel").pack(anchor="w")
+        overview=ttk.Frame(f)
         self._build_stats(overview)
+
+        controls=ttk.Frame(f,padding=(24,4));controls.pack(fill="x")
+        self.category_chips=ttk.Frame(controls);self.category_chips.pack(side="left")
+        self.category_chips_key=None
+        controls.bind("<Configure>",lambda event:self.refresh_category_chips())
+        self.search=tk.StringVar()
+        self.search.trace_add("write",lambda *args:self.refresh_list())
+        search_shell=tk.Frame(controls,bg=t["card"],highlightthickness=1,highlightbackground=t["border"])
+        search_shell.pack(side="right",fill="x",expand=True,padx=(20,0))
+        ttk.Label(search_shell,text=tr("Поиск"),style="CardMuted.TLabel").pack(side="left",padx=(12,6))
+        self.search_entry=ttk.Entry(search_shell,textvariable=self.search,style="MidnightSearch.TEntry",width=18)
+        self.search_entry.pack(side="left",fill="x",expand=True,padx=(0,8),pady=3)
 
         bottom = ttk.Frame(f, style="Side.TFrame", padding=(14, 5))
         bottom.pack(side="bottom", fill="x")
@@ -3257,6 +3281,7 @@ class App:
         self.root.update_idletasks()
         scale = max(1.0, float(self.root.tk.call("tk", "scaling")) / (96/72))
         compact = self.root.winfo_width() / scale < 1000
+        if compact:self.hello_status.pack_forget()
         body = ttk.Notebook(f) if compact else ttk.PanedWindow(f, orient="horizontal")
         body.pack(fill="both", expand=True, padx=24, pady=(12, 20))
         self.body=body;self.compact=compact;self._sidebar_hidden=False
@@ -3288,19 +3313,8 @@ class App:
             body.add(side_fr, weight=0)
 
         center = self.center_panel = ttk.Frame(body)
-        toolbar = ttk.Frame(center, style="Panel.TFrame", padding=(16, 14))
-        toolbar.pack(fill="x")
-        ttk.Label(toolbar, text=tr("Поиск по названию, сайту или логину"),
-                  style="Muted.TLabel").pack(side="bottom", anchor="w", pady=(8, 0))
-        ttk.Label(toolbar, text=tr('Записи'), style="Section.TLabel").pack(side="left", padx=(0, 18))
-        self.search = tk.StringVar()
-        self.search.trace_add("write", lambda *a: self.refresh_list())
-        self.search_entry = ttk.Entry(toolbar, textvariable=self.search, style="Search.TEntry")
-        self.search_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(toolbar, text=tr('Найти'), style="Compact.TButton",
-                   command=lambda: self.search_entry.focus_set()).pack(side="left", padx=(8, 0))
-        filter_bar=ttk.Frame(center,style="Panel.TFrame",padding=(16,4))
-        filter_bar.pack(fill="x")
+        filter_bar=ttk.Frame(center,style="Panel.TFrame",padding=(16,10))
+        self.filter_bar=filter_bar
         self.issue_choices={tr("Все записи"):None,tr("Слабые пароли"):ISSUE_WEAK,tr("Повторы паролей"):ISSUE_REUSED,tr("Устаревшие пароли"):ISSUE_OLD,tr("Без пароля"):ISSUE_EMPTY}
         self.issue_filter=tk.StringVar(value=tr("Все записи"))
         picker=ttk.Combobox(filter_bar,textvariable=self.issue_filter,values=list(self.issue_choices),state="readonly",width=22)
@@ -3309,12 +3323,15 @@ class App:
         self.library_picker=ttk.Combobox(filter_bar,textvariable=self.library_filter,state="readonly",width=24)
         self.library_picker.pack(side="right",padx=(8,0))
         self.library_picker.bind("<<ComboboxSelected>>",lambda event:self.set_library_filter(self.library_choices[self.library_filter.get()]))
-        lst = ttk.Frame(center, style="Panel.TFrame")
+        utilities=ttk.Frame(center,padding=(4,0,4,8));utilities.pack(fill="x")
+        self.list_count=ttk.Label(utilities,text="",style="BgMuted.TLabel");self.list_count.pack(side="left")
+        ttk.Button(utilities,text=tr("Фильтры"),style="Quiet.TButton",command=self.toggle_filters).pack(side="right")
+        ttk.Button(utilities,text=tr("Сортировка"),style="Quiet.TButton",command=lambda:self.sort_by("title")).pack(side="right",padx=8)
+        lst = ttk.Frame(center)
         lst.pack(fill="both", expand=True)
         cols = [c[0] for c in self.COLUMNS]
         horizontal = ttk.Scrollbar(lst, orient="horizontal")
-        horizontal.pack(side="bottom", fill="x")
-        self.tree = ttk.Treeview(lst, columns=cols, displaycolumns=("fav","title","login"), show="headings", selectmode="extended")
+        self.tree = RecordModel(lst, columns=cols, displaycolumns=("fav","title","login"), show="headings", selectmode="extended")
         from tkinter import font as tkfont
         column_font = tkfont.Font(family=FF, size=10)
         for key, name, width in self.COLUMNS:
@@ -3322,12 +3339,11 @@ class App:
             minimum = max(width, column_font.measure(name) + 32)
             self.tree.column(key, width=minimum, minwidth=minimum, anchor="center" if key == "fav" else "w",
                              stretch=(key != "fav"))
-        sb = ttk.Scrollbar(lst, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sb.set)
-        self.tree.configure(xscrollcommand=horizontal.set)
-        horizontal.configure(command=self.tree.xview)
-        self.tree.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        self.record_view=RecordList(lst,self.tree,self.vault,t,scale,font_size,self.edit,self.delete,self.context_menu,self.copy_login,self.copy_password)
+        sb=ttk.Scrollbar(lst,orient="vertical",command=self.record_view.yview)
+        self.record_view.yscroll_callback=sb.set
+        self.record_view.pack(side="left",fill="both",expand=True)
+        sb.pack(side="right",fill="y")
         self.empty_lbl = ttk.Label(lst, text="", style="Muted.TLabel", justify="center",
                                    font=(FF, 11))
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -3407,6 +3423,25 @@ class App:
         if info['days'] is None or info['days']>=7:
             self.settings.set("backup_reminded",day)
             self.notify(tr("Сохраните отдельную резервную копию на другом диске."),lambda:feature_dialogs.backups(self))
+
+    def toggle_filters(self):
+        if self.filter_bar.winfo_manager():self.filter_bar.pack_forget()
+        else:self.filter_bar.pack(side="top",fill="x",before=self.center_panel.winfo_children()[-1])
+
+    def refresh_category_chips(self):
+        if not hasattr(self,"category_chips") or not self.category_chips.winfo_exists():return
+        cats=self.vault.categories()
+        scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
+        available=self.root.winfo_width()/scale-self.rail.winfo_reqwidth()/scale-96-260
+        limit=max(0,min(3,int((available-65)/108)))
+        key=(tuple(cats[:limit]),self.cat_filter)
+        if self.category_chips_key==key:return
+        self.category_chips_key=key
+        for child in self.category_chips.winfo_children():child.destroy()
+        scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
+        for value,label in [("all",tr("Все"))]+[("cat:"+cat,cat) for cat in cats[:limit]]:
+            button=DesignButton(self.category_chips,label,lambda selected=value:self.set_library_filter(selected),self.t,kind="chip",width=int((60 if value=="all" else 108)*scale),height=34,scale=scale,font_size=9)
+            button.selected=self.cat_filter==value;button.pack(side="left",padx=(0,4))
 
     def toggle_sidebar(self,persist=True):
         if not hasattr(self,"side_panel") or not self.side_panel.winfo_exists():return
@@ -3565,8 +3600,13 @@ class App:
     # ---------------- панель деталей
     def _build_details(self, p):
         p.columnconfigure(0, weight=1)
-        self.d_title = ttk.Label(p, text="", style="Title.TLabel", wraplength=320, justify="left")
-        self.d_title.grid(row=0, column=0, sticky="we", pady=(0, 8))
+        header=ttk.Frame(p,style="Panel.TFrame");header.grid(row=0,column=0,sticky="we",pady=(4,22))
+        scale=max(1.0,float(self.root.tk.call("tk","scaling"))/(96/72))
+        self.d_avatar=tk.Canvas(header,width=int(48*scale),height=int(48*scale),bg=self.t["panel"],highlightthickness=0)
+        self.d_avatar.pack(side="left",padx=(0,12))
+        heading=ttk.Frame(header,style="Panel.TFrame");heading.pack(side="left",fill="x",expand=True)
+        self.d_title=ttk.Label(heading,text="",style="Title.TLabel",wraplength=250,justify="left");self.d_title.pack(anchor="w")
+        self.d_domain=ttk.Label(heading,text="",style="Muted.TLabel",wraplength=250);self.d_domain.pack(anchor="w",pady=(3,0))
         self.d_empty = ttk.Label(p, text=tr('Выберите запись в списке\nили нажмите «＋ Добавить»'),
                                  style="Muted.TLabel", justify="center")
         self.dvars, self.dfields = {}, {}
@@ -3577,29 +3617,25 @@ class App:
                 ("category", tr('КАТЕГОРИЯ'), ()), ("tags", tr('ТЕГИ'), ()),
                 ("source", tr('ИСТОЧНИК'), ()), ("updated", tr('ИЗМЕНЕНО'), ()))
         for i, (key, text, btns) in enumerate(spec, start=1):
-            fr = ttk.Frame(p, style="Panel.TFrame")
-            ttk.Label(fr, text=tr(text), style="Muted.TLabel", font=(FF, 9)).pack(anchor="w")
-            line = ttk.Frame(fr, style="Panel.TFrame")
-            line.pack(fill="x", pady=(2, 0))
-            var = tk.StringVar()
-            lbl_style = "Mono.TLabel" if key in ("password", "totp") else "Panel.TLabel"
-            actions=ttk.Frame(line,style="Panel.TFrame")
-            actions.pack(side="right")
-            for btn_text, cmd in reversed(btns):
-                b = ttk.Button(actions, text=btn_text, command=cmd, style="Compact.TButton")
-                b.pack(side="right", padx=(4, 0))
-                if key == "password" and btn_text == tr('Показать'):
-                    self.pw_btn = b
-            label=ttk.Label(line,textvariable=var,style=lbl_style,wraplength=190,justify="left")
+            palette=dict(self.t,bg=self.t["panel"],panel=self.t["card"])
+            fr=RoundedCard(p,palette)
+            fr.body.configure(style="Card.TFrame")
+            ttk.Label(fr.body,text=tr(text),style="CardMuted.TLabel",font=(FF,9)).pack(anchor="w")
+            line=ttk.Frame(fr.body,style="Card.TFrame");line.pack(fill="x",pady=(5,0))
+            var=tk.StringVar()
+            actions=ttk.Frame(line,style="Card.TFrame");actions.pack(side="right")
+            for btn_text,cmd in reversed(btns):
+                b=ttk.Button(actions,text=btn_text,command=cmd,style="TextAction.TButton")
+                b.pack(side="right",padx=(5,0))
+                if key=="password" and btn_text==tr("Показать"):self.pw_btn=b
+            label=ttk.Label(line,textvariable=var,style="CardMono.TLabel" if key in ("password","totp") else "Card.TLabel",wraplength=180,justify="left")
             label.pack(side="left",fill="x",expand=True)
-            line.bind('<Configure>',lambda event,field=label,buttons=actions:field.configure(wraplength=max(80,event.width-buttons.winfo_reqwidth()-8)))
-            if key == "password":
-                self.pw_bar = ttk.Progressbar(fr, maximum=100)
-                self.pw_bar.pack(fill="x", pady=(6, 0))
-                self.pw_bar_lbl = ttk.Label(fr, text="", style="Muted.TLabel")
-                self.pw_bar_lbl.pack(anchor="w")
-            fr.grid(row=i, column=0, sticky="we", pady=6)
-            self.dvars[key], self.dfields[key] = var, fr
+            line.bind("<Configure>",lambda event,field=label,buttons=actions:field.configure(wraplength=max(60,event.width-buttons.winfo_reqwidth()-8)))
+            if key=="password":
+                self.pw_bar=ttk.Progressbar(fr.body,maximum=100)
+                self.pw_bar_lbl=ttk.Label(fr.body,text="",style="CardMuted.TLabel")
+            fr.grid(row=i,column=0,sticky="we",pady=6)
+            self.dvars[key],self.dfields[key]=var,fr
 
         cf = ttk.Frame(p, style="Panel.TFrame")
         ttk.Label(cf, text=tr('ДОПОЛНИТЕЛЬНО'), style="Muted.TLabel", font=(FF, 8, "bold")).pack(anchor="w")
@@ -3617,22 +3653,16 @@ class App:
         nf.grid(row=10, column=0, sticky="we", pady=6)
         self.dfields["note"] = nf
 
-        self.act_normal = ttk.Frame(p, style="Panel.TFrame")
-        r1 = ttk.Frame(self.act_normal, style="Panel.TFrame")
-        r1.pack(fill="x")
-        ttk.Button(r1, text=tr('Изменить'), style="Accent.TButton", command=self.edit).pack(side="left")
-        self.fav_btn = ttk.Button(r1, text="★", width=3, command=self.toggle_fav)
-        self.fav_btn.pack(side="left", padx=4)
-        ttk.Button(r1, text=tr('⌨ Ввести'), command=self.autotype_selected).pack(side="left")
-        r2 = ttk.Frame(self.act_normal, style="Panel.TFrame")
-        r2.pack(fill="x", pady=(6, 0))
-        self.hist_btn = ttk.Button(r2, text=tr('История'), command=self.show_history)
-        self.hist_btn.pack(side="left")
-        self.att_btn = ttk.Button(r2, text=tr('Вложения'), command=self.attachments)
-        self.att_btn.pack(side="left", padx=4)
-        ttk.Button(r2, text=tr('Утечки?'), command=self.check_pwned_selected).pack(side="left")
-        ttk.Button(self.act_normal, text=tr('Удалить запись'), style="Compact.TButton",
-                   command=self.delete).pack(anchor="w", pady=(10, 0))
+        self.act_normal=ttk.Frame(p,style="Panel.TFrame")
+        button_palette=dict(self.t,bg=self.t["panel"])
+        DesignButton(self.act_normal,tr("Изменить"),self.edit,button_palette,scale=scale,height=36,font_size=9).pack(side="left")
+        self.hist_btn=ttk.Button(self.act_normal,text=tr("История"),command=self.show_history,style="DetailAction.TButton");self.hist_btn.pack(side="left",padx=8)
+        self.fav_btn=ttk.Button(self.act_normal,command=self.toggle_fav)
+        self.att_btn=ttk.Button(self.act_normal,command=self.attachments)
+        more=self._menu()
+        for label,action in ((tr("Открыть сайт"),self.open_url),(tr("Избранное"),self.toggle_fav),(tr("Вложения"),self.attachments),(tr("⌨ Ввести"),self.autotype_selected),(tr("Утечки?"),self.check_pwned_selected),(tr("Удалить запись"),self.delete)):
+            more.add_command(label=label,command=action)
+        ttk.Menubutton(self.act_normal,text=tr("Ещё"),menu=more,style="Header.TMenubutton").pack(side="left")
         self.act_trash = ttk.Frame(p, style="Panel.TFrame")
         ttk.Button(self.act_trash, text=tr('Восстановить'), style="Accent.TButton",
                    command=self.restore).pack(side="left")
@@ -3648,6 +3678,7 @@ class App:
             self._last_sel = cur
             self._hide_pw(refresh=False)
         self.show_details()
+        if hasattr(self,"record_view"):self.record_view.draw()
 
     def show_details(self):
         e = self.selected()
@@ -3656,17 +3687,22 @@ class App:
         self.act_normal.grid_remove()
         self.act_trash.grid_remove()
         if not e:
-            self.d_title.config(text="")
+            self.d_title.config(text="");self.d_domain.config(text="");self.d_avatar.delete("all")
             self.d_empty.grid(row=1, column=0, pady=70)
             return
         self.d_empty.grid_remove()
-        self.d_title.config(text=("★ " if e["favorite"] else "") + e["title"])
+        self.d_title.config(text=e["title"])
+        self.d_domain.config(text=hostname(e["url"]))
+        self.d_avatar.delete("all")
+        aw=max(48,self.d_avatar.winfo_reqwidth())
+        rounded(self.d_avatar,0,0,aw,aw,12,self.t["sel"])
+        self.d_avatar.create_text(aw/2,aw/2,text=(e["title"].strip()[:1] or "?").upper(),font=(FF,18,"bold"),fill=self.t["accent"])
         values = {"url": e["url"], "login": e["login"], "category": e["category"],
                   "tags": e["tags"], "source": e["source"],
-                  "updated": f"{e['updated']}{tr('  (создано ')}{e['created']})"}
+                  "updated": e["updated"][:10]}
         for key, val in values.items():
             self.dvars[key].set(val)
-            if val:
+            if val and key!="url":
                 self.dfields[key].grid()
         self._show_password(e)
         if e["password"]:
@@ -3801,6 +3837,7 @@ class App:
         self.library_picker.configure(values=list(self.library_choices))
         self.library_filter.set(next((label for label,value in self.library_choices.items() if value==self.cat_filter),tr("Все категории")))
         for value,button in self.rail_buttons.items():button.configure(style="RailActive.TButton" if value==self.cat_filter else "Rail.TButton")
+        self.refresh_category_chips()
 
     def on_side_select(self, _=None):
         sel = self.side.selection()
@@ -3863,6 +3900,8 @@ class App:
                 (e["deleted"] if self.cat_filter == "trash" else e["updated"])[:10]))
         if prev and self.tree.exists(prev[0]):
             self.tree.selection_set(prev[0])
+        if hasattr(self,"record_view") and self.record_view.winfo_exists():self.record_view.refresh()
+        if hasattr(self,"list_count") and self.list_count.winfo_exists():self.list_count.configure(text=tr("Записей: ")+str(len(items)))
         total = len(self.vault.active()) if self.cat_filter != "trash" else len(self.vault.trash())
         self.status_right.config(text=f"{tr('Показано: ')}{len(items)}{tr(' из ')}{total}")
         if items:

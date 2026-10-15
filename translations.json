@@ -524,5 +524,12 @@
   "Категория: ": "Category: ",
   "Тег: ": "Tag: ",
   "Поиск по названию, сайту или логину": "Search by title, website or username",
-  "Тема": "Theme"
+  "Тема": "Theme",
+  "Поиск": "Search",
+  "Фильтры": "Filters",
+  "Сортировка": "Sort",
+  "Записей: ": "Entries: ",
+  "Хранилище открыто": "Vault unlocked",
+  "Ещё": "More",
+  "Все": "All"
 }

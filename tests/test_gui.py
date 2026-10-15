@@ -52,6 +52,32 @@ class DesktopTests(unittest.TestCase):
         self.app.root.update()
         self.assertLess(self.app.rail.winfo_width(),self.app.root.winfo_width()/4)
 
+    def test_designed_record_list_selection_keyboard_and_virtualization(self):
+        from types import SimpleNamespace
+        for index in range(1000):
+            self.app.vault.entries.append(m.normalize({'title':f'Entry {index:04d}',
+                'login':'fake@example.test','password':'NeverDrawThis!789'}))
+        self.app.refresh_all();self.app.root.update()
+        view=self.app.record_view
+        self.assertFalse(self.app.tree.winfo_ismapped())
+        self.assertTrue(view.winfo_ismapped())
+        self.assertLess(len(view.drawn),40)
+        view.select_at(SimpleNamespace(y=10,state=0))
+        first=self.app.tree.selection()[0]
+        view.select_at(SimpleNamespace(y=view.row_height+10,state=4))
+        self.assertEqual(len(self.app.tree.selection()),2)
+        view.move('last');self.app.root.update()
+        self.assertEqual(self.app.tree.selection(),(view.ids[-1],))
+        self.assertIn(view.ids[-1],view.drawn)
+        text=' '.join(view.itemcget(item,'text') for item in view.find_all() if view.type(item)=='text')
+        self.assertNotIn('NeverDrawThis',text)
+        self.assertEqual(self.app.tree.identify_row(10),view.ids[view.index_at(10)])
+        self.app.goto_entry(first);self.app.root.update()
+        self.assertIn(first,view.drawn)
+        self.app.toggle_filters();self.app.root.update()
+        self.assertTrue(self.app.filter_bar.winfo_ismapped())
+        self.app.toggle_filters();self.assertFalse(self.app.filter_bar.winfo_manager())
+
     def test_recovery_dialogs_and_duplicate_choices_open_in_both_languages(self):
         import feature_dialogs
         for title in ('First','Second'):
