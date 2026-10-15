@@ -1,6 +1,6 @@
 ﻿#define MyAppName "Мои пароли"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.5"
+#define MyAppVersion "4.5.1"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}

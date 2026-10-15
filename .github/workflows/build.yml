@@ -6,6 +6,9 @@ on:
 permissions:
   contents: write
   actions: read
+concurrency:
+  group: moiparoli-windows-main
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-latest
@@ -107,10 +110,14 @@ jobs:
 
 
       - name: Publish tested release
+        id: publish_release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $head = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha
+          if ($LASTEXITCODE -ne 0) { throw "Cannot check repository head" }
+          if ($head -ne $env:GITHUB_SHA) { Write-Output "A newer commit exists; release publication skipped"; exit 0 }
           Compress-Archive -Path portable/* -DestinationPath MoiParoli-portable.zip
           $version = python -c "import moi_paroli; print(moi_paroli.APP_VERSION)"
           $tag = "v$version"
@@ -123,5 +130,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
           }
 
+          "published=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Verify public update and installer download
+        if: steps.publish_release.outputs.published == 'true'
         run: python tools/test_public_update.py
