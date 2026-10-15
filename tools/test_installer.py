@@ -1,5 +1,6 @@
 """Install, start, and uninstall in an isolated CI directory; preserve user data."""
 import os
+import json
 import subprocess
 import tempfile
 import time
@@ -45,20 +46,28 @@ with tempfile.TemporaryDirectory() as tmp:
     verify_icon(app / 'MoiParoli.exe', installed_icon)
     # Read the actual generated shell shortcut, without launching the program.
     shortcut_check = r'''
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
     $shell = New-Object -ComObject WScript.Shell
-    $verified = 0
+    $links = @()
     foreach ($scope in @('Programs','CommonPrograms')) {
         $link = Join-Path ([Environment]::GetFolderPath($scope)) 'Bitora password.lnk'
         if (!(Test-Path -LiteralPath $link)) { continue }
         $shortcut = $shell.CreateShortcut($link)
-        if ($shortcut.TargetPath -ne $env:BITORA_TEST_EXE) { continue }
-        if ($shortcut.IconLocation -notlike ($env:BITORA_TEST_ICON + '*')) { throw 'Shortcut icon mismatch' }
-        $verified++
+        $links += @{target=$shortcut.TargetPath; icon=$shortcut.IconLocation; link=$link}
     }
-    if (!$verified) { throw 'Installed shortcut target not found in either Start menu scope' }
+    ConvertTo-Json -Compress -InputObject @($links)
     '''
-    subprocess.run(['powershell','-NoProfile','-Command',shortcut_check],check=True,timeout=30,
-                   env=dict(os.environ,BITORA_TEST_EXE=str(app/'MoiParoli.exe'),BITORA_TEST_ICON=str(installed_icon)))
+    shortcuts=subprocess.run(['powershell','-NoProfile','-Command',shortcut_check],check=True,timeout=30,
+                             capture_output=True,encoding='utf-8')
+    links=json.loads(shortcuts.stdout.lstrip('\ufeff'))
+    # Shell links expand 8.3 paths such as RUNNER~1. Compare file identity,
+    # rather than requiring two valid spellings of the same path to be equal.
+    matching=[link for link in links if Path(link['target']).is_file()
+              and os.path.samefile(link['target'],app/'MoiParoli.exe')]
+    assert matching, f'Installed shortcut target not found: {links!r}; expected {app!s}'
+    for link in matching:
+        icon_path=link['icon'].rsplit(',',1)[0].strip('"')
+        assert os.path.samefile(icon_path,installed_icon), f'Incorrect shortcut icon: {link!r}'
     print('Installed Bitora icon and Start menu shortcut verified')
     from browser_registration import diagnose
     assert all(item["ok"] for item in diagnose()), "Installer did not register all native host views"
