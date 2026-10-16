@@ -318,13 +318,20 @@ def save_record(host,candidate):
     return result
 
 def handle(msg, selector=select_record, saver=save_record):
+    if msg.get('action') in ('passkey_create','passkey_get'):
+        from passkey_dialog import approve
+        from passkeys import PasskeyError
+        try:return approve(msg['action'].partition('_')[2],msg.get('options'))
+        except PasskeyError as exc:return {'ok':False,'name':exc.name,'error':str(exc)}
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.8.2","supports":["get_credentials","save_credentials"]}
+        return {"ok":True,"version":"4.10.0","supports":["get_credentials","save_credentials","passkey_create","passkey_get"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)
         except ValueError as exc:
             return {"ok":False,"error":str(exc)}
+        from site_policy import excluded
+        if excluded(host):return {'ok':False,'error':'Website excluded in Bitora settings'}
         return saver(host,candidate)
     if msg.get('action') != 'get_credentials':
         return {'ok': False, 'error': 'Unsupported action'}
@@ -332,6 +339,8 @@ def handle(msg, selector=select_record, saver=save_record):
         host = verified_origin(msg.get('url'))
     except ValueError as exc:
         return {'ok': False, 'error': str(exc)}
+    from site_policy import excluded
+    if excluded(host):return {'ok':False,'error':'Website excluded in Bitora settings'}
     return selector(host)
 
 

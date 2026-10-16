@@ -101,6 +101,13 @@ def line_icon(canvas,name,x,y,size,color,width=1.6):
         for i in range(8):
             angle=i*math.pi/4
             line(12+7*math.cos(angle),12+7*math.sin(angle),12+10*math.cos(angle),12+10*math.sin(angle))
+    elif name=='home':line(2,11,12,3,22,11);line(5,9,5,21,10,21,10,14,14,14,14,21,19,21,19,9)
+    elif name=='application':rect(3,3,21,21);line(3,8,21,8);line(7,5,7,6)
+    elif name=='card':rect(2,5,22,20);line(2,10,22,10);line(5,16,10,16)
+    elif name=='document':line(5,2,15,2,20,7,20,22,5,22,5,2);line(15,2,15,7,20,7)
+    elif name=='address':oval(5,2,19,16);oval(10,7,14,11);line(6,13,12,23,18,13)
+    elif name=='note':rect(4,3,20,22);line(8,8,16,8);line(8,12,16,12);line(8,16,13,16)
+    elif name=='shield':line(12,2,21,6,20,15,17,20,12,23,7,20,4,15,3,6,12,2);line(8,12,11,15,16,9)
     elif name=='plus':line(12,5,12,19);line(5,12,19,12)
     elif name=='search':oval(3,3,17,17);line(15,15,22,22)
     elif name=='copy':rect(8,8,21,21);line(16,4,4,4,4,16)
@@ -120,6 +127,8 @@ class DesignButton(tk.Canvas):
         self.palette=palette;self.kind=kind;self.command=command;self.label=text
         self.icon=icon;self.scale=scale;self.vertical=vertical;self.disabled=False;self.selected=False;self.hover=False
         self.align=align;self.badge=str(badge)
+        self._paint_fill=None;self._transition_fill=None;self._fade_id=None;self._release_id=None;self._pressed=False
+        self._motion_root=parent._root()
         self.text_font=tkfont.Font(parent,family='Segoe UI',size=font_size)
         self.parent_bg=palette['side'] if kind=='rail' else palette['bg']
         minimum=self.text_font.measure(text)+int((40 if icon else 28)*scale)
@@ -130,9 +139,43 @@ class DesignButton(tk.Canvas):
         self.bind('<Button-1>',lambda e:self.invoke())
         self.bind('<Return>',lambda e:self.invoke());self.bind('<space>',lambda e:self.invoke())
         self.bind('<FocusIn>',lambda e:self.draw());self.bind('<FocusOut>',lambda e:self.draw())
+        self.bind('<Destroy>',self._dispose_motion,add='+')
         self.draw()
 
-    def _hover(self,value):self.hover=value;self.draw()
+    def _motion_enabled(self):
+        app=getattr(self.winfo_toplevel(),'_bitora_app',None)
+        return bool(app and app.settings.get('animations'))
+
+    def _surface_fill(self):
+        t=self.palette
+        fill=(t['accent_hi'] if self.hover else t['accent']) if self.kind=='primary' else t['sel'] if self.selected else t['hover'] if self.hover else self.parent_bg
+        return blend(fill,t['accent_fg'] if self.kind=='primary' else t['accent'],.10) if self._pressed else fill
+
+    def _animate_surface(self):
+        if self._fade_id:self._motion_root.after_cancel(self._fade_id);self._fade_id=None
+        target=self._surface_fill();origin=self._paint_fill or target
+        if not self._motion_enabled() or origin==target:
+            self._transition_fill=None;self.draw();return
+        def step(index):
+            self._fade_id=None
+            amount=1-(1-index/5)**3
+            self._transition_fill=blend(origin,target,amount)
+            self.draw()
+            if index<5:self._fade_id=self._motion_root.after(22,lambda:step(index+1))
+            else:self._transition_fill=None
+        step(1)
+
+    def _hover(self,value):
+        self.hover=value;self._animate_surface()
+
+    def _dispose_motion(self,event):
+        if event.widget is self:
+            for job in (self._fade_id,self._release_id):
+                if job:self._motion_root.after_cancel(job)
+            self._fade_id=self._release_id=None
+
+    def _release_press(self):
+        self._release_id=None;self._pressed=False;self._animate_surface()
 
     def configure(self,cnf=None,**kwargs):
         if cnf:kwargs.update(cnf)
@@ -149,7 +192,12 @@ class DesignButton(tk.Canvas):
 
     def invoke(self):
         if not self.disabled:
-            self.focus_set();self.command()
+            self.focus_set()
+            if self._motion_enabled():
+                if self._release_id:self._motion_root.after_cancel(self._release_id)
+                self._pressed=True;self._animate_surface()
+                self._release_id=self._motion_root.after(110,self._release_press)
+            self.command()
         return 'break'
 
     def cget(self,key):
@@ -162,13 +210,17 @@ class DesignButton(tk.Canvas):
         self.delete('all');t=self.palette;s=self.scale;w=self.winfo_width();h=self.winfo_height()
         if w<2:return
         primary=self.kind=='primary'
-        fill=t['accent'] if primary else t['sel'] if self.selected else t['hover'] if self.hover else self.parent_bg
+        fill=self._transition_fill or self._surface_fill()
+        self._paint_fill=fill
         color=t['muted'] if self.disabled else t['accent_fg'] if primary else t['accent'] if self.selected or self.kind=='text' else t['muted'] if self.kind=='rail' else t['fg']
         border=t['accent'] if self.focus_get() is self else '' if self.kind in ('rail','chip','text') else t['border'] if not primary else t['accent']
         rounded(self,1,1,w-2,h-2,9*s,fill,border)
         if self.vertical:
             if self.icon:line_icon(self,self.icon,w/2-9*s,8*s,18*s,color,1.7*s)
-            self.create_text(w/2,h-13*s,text=self.label,font=self.text_font,fill=color)
+            label=self.label
+            while label and self.text_font.measure(label+'…')>w-8*s:label=label[:-1]
+            if label!=self.label:label=label.rstrip()+'…'
+            self.create_text(w/2,h-13*s,text=label,font=self.text_font,fill=color)
         else:
             label=self.label
             reserve=(42 if self.icon else 24)*s+(self.text_font.measure(self.badge)+16*s if self.badge else 0)

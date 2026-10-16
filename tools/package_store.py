@@ -7,6 +7,7 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 FILES=('manifest.json','background.js','fill.js','popup.html','popup.js','save.js',
+       'passkeys_worker.js','passkeys_popup.js',
        'form_capture.js','save_offer.js','icon16.png','icon32.png','icon48.png','icon128.png')
 
 def build(folder):

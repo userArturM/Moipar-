@@ -12,7 +12,9 @@ def event_reason(message, parameter):
 
 
 def idle_seconds(value):
-    try:return max(1,min(120,int(value)))*60
+    try:
+        minutes=int(value)
+        return float('inf') if minutes==0 else max(1,min(1440,minutes))*60
     except (TypeError,ValueError,OverflowError):return 300
 
 

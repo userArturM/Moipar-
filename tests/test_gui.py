@@ -18,7 +18,9 @@ class DesktopTests(unittest.TestCase):
         self.app.settings.set("lock_on_minimize",False)
         self.app.settings.set("lock_on_session_lock",False)
         self.app.vault.create("UITestPassword!789")
+        self.app.settings.set('record_layout','list')
         self.app.show_main()
+        self.app.navigate_workspace('all')
         self.app.root.update()
 
     def cleanup_root(self):
@@ -131,7 +133,7 @@ class DesktopTests(unittest.TestCase):
     def test_midnight_navigation_and_category_picker(self):
         self.assertEqual(self.app.root.title(),'Bitora Password Manager')
         self.assertEqual(self.app.theme_name,'dark')
-        self.assertEqual(self.app._sidebar_hidden,self.app.compact)
+        self.assertTrue(self.app._sidebar_hidden)
         self.assertEqual(tuple(self.app.tree.cget('displaycolumns')),('fav','title','login'))
         row=self.app.vault.add({'title':'Work item','category':'Work','password':'FakeOnly!789'})
         self.app.vault.add({'title':'Other item','category':'Personal','password':'OtherFake!789'})
@@ -148,10 +150,11 @@ class DesktopTests(unittest.TestCase):
         self.app.root.geometry('1360x900');self.app.root.update()
         self.app.apply_theme();self.app.show_main();self.app.root.update()
         self.assertFalse(self.app.compact)
-        self.assertFalse(self.app._sidebar_hidden)
+        self.assertTrue(self.app._sidebar_hidden)
         self.assertEqual(self.app.side_panel.master,self.app.rail)
         self.assertEqual(len(self.app.body.panes()),2)
         self.assertEqual(self.app.atelier_header.master,self.app.frame)
+        self.app.navigate_workspace('all');self.app.root.update()
         self.assertLess(self.app.search_entry.winfo_rooty(),self.app.category_chips.winfo_rooty())
         self.assertNotIn('all',self.app.side.get_children())
         self.assertNotIn('fav',self.app.side.get_children())

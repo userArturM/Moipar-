@@ -53,8 +53,8 @@ class SessionTests(unittest.TestCase):
     def test_invalid_idle_preferences_keep_a_safe_timer(self):
         self.assertEqual(idle_seconds('invalid'),300)
         self.assertEqual(idle_seconds(None),300)
-        self.assertEqual(idle_seconds(0),60)
-        self.assertEqual(idle_seconds(99999),7200)
+        self.assertEqual(idle_seconds(0),float('inf'))
+        self.assertEqual(idle_seconds(99999),86400)
 
     def test_event_reasons_and_unrelated_notifications(self):
         for value in (2,4,6,7,11):self.assertEqual(event_reason(0x2B1,value),'session')

@@ -2,8 +2,8 @@
 <html lang="ru">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{color-scheme:dark;--bg:#141c27;--card:#1b2635;--text:#edf3fc;--muted:#a5b4c9;--accent:#a7e0d7;--ink:#132f2c;--line:#334154;--good:#8ddcb7}
-@media(prefers-color-scheme:light){:root{color-scheme:light;--bg:#f2f5f8;--card:#fff;--text:#1b2a3d;--muted:#596a7d;--accent:#23685d;--ink:#fff;--line:#d7e0e9;--good:#247048}}
+:root{color-scheme:dark;--bg:#14182e;--card:#2c3353;--text:#f2f5ff;--muted:#b8c5dd;--accent:#a6c5ff;--ink:#142b54;--line:#465471;--good:#8ddcb7}
+@media(prefers-color-scheme:light){:root{color-scheme:light;--bg:#f3f6fc;--card:#fff;--text:#192a49;--muted:#566783;--accent:#1557d5;--ink:#fff;--line:#d9e2f1;--good:#247048}}
 *{box-sizing:border-box}body{font:14px "Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);width:360px;padding:22px;margin:0}
 .brand{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:650}.brand img{width:36px;height:36px}.brand small{display:block;color:var(--muted);font-size:11px;font-weight:400;margin-top:3px}
 h1{font-size:25px;letter-spacing:-.6px;margin:22px 0 8px}p{color:var(--muted);line-height:1.6;margin:0 0 16px}
@@ -22,4 +22,5 @@ button:hover{filter:brightness(1.08)}button:active{transform:scale(.985)}button:
 <div class="card"><button id="fill">Заполнить данные</button><button id="save" class="secondary">Сохранить с сайта</button><label class="option"><input type="checkbox" id="autosave"> Предлагать сохранение на этом сайте</label><p id="status" role="status" aria-live="polite"></p></div>
 <div class="card"><div class="caption">Последнее действие на вкладке</div><div id="last-result" role="status" aria-live="polite">Проверка результата…</div></div>
 <details class="card"><summary>Связь с приложением</summary><p>Расширение <span id="extension-version"></span></p><p id="connection-details">Проверьте подключение, чтобы узнать версию приложения и доступность сохранения и заполнения.</p><button id="connect" class="link">Проверить подключение</button></details>
-<script src="popup.js"></script><script src="save.js"></script></body></html>
+<div class="card"><label class="option"><input type="checkbox" id="passkeys"> Ключи доступа Bitora</label><p id="passkeys-status" style="font-size:12px;margin:12px 0 0">Проверка поддержки…</p></div>
+<script src="popup.js"></script><script src="save.js"></script><script src="passkeys_popup.js"></script></body></html>

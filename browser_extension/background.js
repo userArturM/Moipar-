@@ -1,4 +1,5 @@
 importScripts('fill.js');
+importScripts('passkeys_worker.js');
 const recent=new Map();
 const remembered=new Map();
 const pending=new Map();
@@ -85,6 +86,10 @@ async function manualRequest(message,sender){
   }
 }
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
+  if(['passkeys_status','passkeys_enable','passkeys_disable'].includes(message?.action)){
+    if(!trustedPopup(sender)){sendResponse({ok:false,error:'Untrusted sender'});return true}
+    bitoraPasskeys.control(message.action).then(sendResponse).catch(error=>sendResponse({ok:false,error:String(error.message)}));return true;
+  }
   if(message?.action==='last_result'){
     lastResult(message,sender).then(sendResponse).catch(()=>sendResponse({ok:false}));
     return true;

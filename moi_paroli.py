@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bitora Password Manager 4.8.2 — менеджер личных паролей для Windows.
+Bitora Password Manager 4.10.0 — менеджер личных паролей для Windows.
 
 Безопасность
   * AES-256-GCM, ключ из мастер-пароля через scrypt; любая порча файла обнаруживается.
@@ -41,6 +41,8 @@ from urllib.parse import urlparse, parse_qs
 
 from localization import tr
 import feature_dialogs
+import reference_ui
+import studio_ui
 from windows_hello import HelloUnlock, HelloUnavailable
 from cryptography.exceptions import InvalidTag
 from cryptography.fernet import Fernet, InvalidToken
@@ -58,7 +60,7 @@ except ImportError:  # tkinter нужен только для окна
 
 APP_NAME = "Bitora Password Manager"
 APP_ID = "MoiParoli"
-APP_VERSION = "4.8.2"
+APP_VERSION = "4.10.0"
 KDF_N, KDF_R, KDF_P = 2 ** 16, 8, 1
 KDF_MAX_N = 2 ** 20
 MIN_MASTER_LEN = 4
@@ -145,7 +147,7 @@ COMMON_PARTS = ("password", "qwerty", "123456", "111111", "admin", "letmein", "w
 
 
 def generate_password(length=16, lower=True, upper=True, digits=True, symbols=True,
-                      ambiguous=False):
+                      ambiguous=False, symbol_chars=None):
     pools = []
     if lower:
         pools.append(string.ascii_lowercase)
@@ -154,7 +156,9 @@ def generate_password(length=16, lower=True, upper=True, digits=True, symbols=Tr
     if digits:
         pools.append(string.digits)
     if symbols:
-        pools.append(SYMBOLS)
+        alphabet=SYMBOLS if symbol_chars is None else ''.join(dict.fromkeys(symbol_chars))
+        if not alphabet or any(ord(c)<33 or ord(c)>126 for c in alphabet):raise ValueError('Invalid symbol alphabet')
+        pools.append(alphabet)
     if not pools:
         raise ValueError("не выбран ни один тип символов")
     if not ambiguous:
@@ -749,7 +753,7 @@ class Vault:
             e["history"].insert(0, {"password": e["password"], "changed": now_str()})
             del e["history"][HISTORY_LIMIT:]
         for k in ("title", "url", "login", "password", "totp", "category", "tags", "note",
-                  "favorite", "fields"):
+                  "favorite", "fields", "kind"):
             if k in data:
                 e[k] = data[k]
         e["updated"] = now_str()
@@ -863,6 +867,7 @@ class Vault:
         limit = datetime.now() - timedelta(days=OLD_PASSWORD_DAYS)
         for e in act:
             if not e["password"]:
+                if e.get('kind') in ('card','document','address','note','file','passkey'):continue
                 issues.append((ISSUE_EMPTY, e))
                 continue
             if strength(e["password"])[2] == 0:
@@ -909,15 +914,27 @@ class Settings:
         return self.data.get(key, self.DEFAULTS.get(key))
 
     def apply_midnight_design(self):
-        if self.get("design_version") in ('midnight','midnight-atelier'):return False
+        if self.get("design_version") in ('midnight','midnight-atelier','mint-workspace','studio'):return False
         self.data.update(theme="dark",sidebar_collapsed=True,design_version="midnight")
         self.set("design_version","midnight")
         return True
 
     def apply_atelier_design(self):
-        if self.get('design_version')=='midnight-atelier':return False
+        if self.get('design_version') in ('midnight-atelier','mint-workspace','studio'):return False
         self.data.update(theme='dark',sidebar_collapsed=False,design_version='midnight-atelier')
         self.set('design_version','midnight-atelier')
+        return True
+
+    def apply_mint_design(self):
+        if self.get('design_version') in ('mint-workspace','studio'):return False
+        self.data.update(theme='light',sidebar_collapsed=True,design_version='mint-workspace')
+        self.set('design_version','mint-workspace')
+        return True
+
+    def apply_studio_design(self):
+        if self.get('design_version')=='studio':return False
+        self.data.update(theme='dark',record_layout='cards',design_version='studio')
+        self.set('design_version','studio')
         return True
 
     def set(self, key, value):
@@ -1006,7 +1023,8 @@ def parse_csv(raw):
         url, login, password = g("url"), g("login"), g("password")
         if url.lower() == "http://sn":  # защищённая заметка LastPass
             url = ""
-        if not (url or login or password):
+        kind=row.get('bitora_kind','')
+        if not (url or login or password) and not (kind in reference_ui.KINDS and g('title')):
             skipped += 1
             continue
         items.append({
@@ -1015,17 +1033,19 @@ def parse_csv(raw):
             "note": g("note"), "category": g("category") or f"Импорт: {source}",
             "favorite": g("fav").lower() in ("1", "true", "yes", "да"),
             "source": source,
+            **({'kind':kind,'fields':parse_fields(row.get('extra','')),'tags':row.get('tags','')} if kind in reference_ui.KINDS else {}),
         })
     return source, items, skipped
 
 
 def export_csv_text(entries):
+    if any(e.get('passkey') for e in entries):raise ValueError('Passkeys require an encrypted backup')
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["name", "url", "username", "password", "totp", "category", "tags", "note", "favorite", "extra"])
+    w.writerow(["name", "url", "username", "password", "totp", "category", "tags", "note", "favorite", "extra", "bitora_kind"])
     for e in entries:
         w.writerow([e["title"], e["url"], e["login"], e["password"], e["totp"], e["category"],
-                    e["tags"], e["note"], "1" if e["favorite"] else "", format_fields(e["fields"])])
+                    e["tags"], e["note"], "1" if e["favorite"] else "", format_fields(e["fields"]),reference_ui.entry_kind(e)])
     return out.getvalue()
 
 
@@ -1387,13 +1407,13 @@ def start_tray(app):
 FF = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
 
-DARK = {"bg": "#101923", "side": "#0c141e", "panel": "#192532", "card": "#20303d",
-        "fg": "#e8f0f4", "muted": "#a1b3c1", "accent": "#b5e9d5", "accent_hi": "#c9f2e4",
-        "accent_fg": "#123629", "sel": "#24433c", "border": "#2d3e4c", "hover": "#20303d",
+DARK = {"bg": "#14182e", "side": "#293d60", "panel": "#2c3353", "card": "#1b213c",
+        "fg": "#f2f5ff", "muted": "#b8c5dd", "accent": "#a6c5ff", "accent_hi": "#bfd6ff",
+        "accent_fg": "#142b54", "sel": "#1d2b4a", "border": "#465471", "hover": "#384a6c",
         "good": "#8ddcb7", "warn": "#edc58e", "bad": "#ffa6af"}
-LIGHT = {"bg": "#f2f5f8", "side": "#e7edf3", "panel": "#ffffff", "card": "#f1f5f8",
-         "fg": "#1b2a3d", "muted": "#596a7d", "accent": "#23685d", "accent_hi": "#1c594f",
-         "accent_fg": "#ffffff", "sel": "#dceeea", "border": "#d7e0e9", "hover": "#e4edf4",
+LIGHT = {"bg": "#f3f6fc", "side": "#ffffff", "panel": "#ffffff", "card": "#f0f4fc",
+         "fg": "#192a49", "muted": "#566783", "accent": "#1557d5", "accent_hi": "#1048b7",
+         "accent_fg": "#ffffff", "sel": "#e1ebff", "border": "#d9e2f1", "hover": "#edf3ff",
          "good": "#247048", "warn": "#8e5800", "bad": "#ab3448"}
 THEMES = {"dark": DARK, "light": LIGHT}
 LEVEL_STYLE = {0: "Bad", 1: "Warn", 2: "Good", 3: "Good"}
@@ -1686,7 +1706,8 @@ class GeneratorDialog:
         top = self.top = _new_top(app, parent, tr('Генератор паролей'))
         frm = _scroll_dialog_body(top,24)
         self.out = tk.StringVar()
-        ttk.Entry(frm, textvariable=self.out, width=44, font=("Consolas", 11)).grid(
+        self.history=[]
+        ttk.Entry(frm, textvariable=self.out, width=30, font=("Consolas", 12)).grid(
             row=0, column=0, columnspan=3, sticky="we", pady=(0, 6))
         self.bar = ttk.Progressbar(frm, maximum=100, length=300)
         self.bar.grid(row=1, column=0, columnspan=2, sticky="we")
@@ -1707,8 +1728,17 @@ class GeneratorDialog:
             ttk.Checkbutton(frm, text=tr(text), variable=var, command=self.regen).grid(
                 row=3 + i, column=0, columnspan=3, sticky="w")
 
+        ttk.Label(frm,text=tr('Набор символов')).grid(row=8,column=0,sticky='w',pady=(8,0))
+        self.symbol_chars=tk.StringVar(value=SYMBOLS)
+        symbols_entry=ttk.Entry(frm,textvariable=self.symbol_chars,width=28)
+        symbols_entry.grid(row=8,column=1,columnspan=2,sticky='we',pady=(8,0))
+        symbols_entry.bind('<FocusOut>',lambda e:self.regen())
+        ttk.Label(frm,text=tr('История текущего сеанса')).grid(row=9,column=0,sticky='w',pady=(10,0))
+        self.history_picker=ttk.Combobox(frm,state='readonly',width=28)
+        self.history_picker.grid(row=9,column=1,columnspan=2,sticky='we',pady=(10,0))
+        self.history_picker.bind('<<ComboboxSelected>>',lambda e:self.out.set(self.history[self.history_picker.current()]))
         btns = ttk.Frame(frm)
-        btns.grid(row=9, column=0, columnspan=3, sticky="e", pady=(14, 0))
+        btns.grid(row=10, column=0, columnspan=3, sticky="e", pady=(14, 0))
         midnight_button(btns, text=tr('Обновить'), command=self.regen).pack(side="left", padx=4)
         midnight_button(btns, text=tr('Копировать'), command=self.copy).pack(side="left", padx=4)
         if select:
@@ -1727,12 +1757,14 @@ class GeneratorDialog:
         except Exception:
             length = 16
         try:
-            pw = generate_password(length, **{k: v.get() for k, v in self.opts.items()})
+            pw = generate_password(length, symbol_chars=self.symbol_chars.get(), **{k: v.get() for k, v in self.opts.items()})
         except ValueError:
             messagebox.showwarning(tr(APP_NAME), tr('Выберите хотя бы один тип символов.'), parent=self.top)
             self.opts["lower"].set(True)
             return
         self.out.set(pw)
+        self.history.insert(0,pw);del self.history[10:]
+        self.history_picker.configure(values=[tr('Пароль')+' '+str(i+1) for i in range(len(self.history))])
         bits, text, level = strength(pw)
         self.bar["value"] = min(100, bits)
         self.bar.configure(style=f"{LEVEL_STYLE[level]}.Horizontal.TProgressbar")
@@ -1759,6 +1791,15 @@ class EntryDialog:
 
         def label(row, text):
             ttk.Label(frm, text=tr(text)).grid(row=row, column=0, sticky="nw", pady=5, padx=(0, 12))
+
+        label(r, 'Тип записи')
+        default_kind = reference_ui.entry_kind(entry) if entry else getattr(app, '_new_entry_kind', 'website')
+        self.kind = tk.StringVar(value=tr(reference_ui.KINDS[default_kind]))
+        self.kind_picker = ttk.Combobox(frm, textvariable=self.kind, state='readonly',
+            values=[tr(name) for key,name in reference_ui.KINDS.items() if key!='passkey' or entry.get('passkey')], width=36)
+        if entry.get('passkey'):self.kind_picker.configure(state='disabled')
+        self.kind_picker.grid(row=r, column=1, sticky='we')
+        r += 1
 
         if is_new:
             label(r, tr('Шаблон'))
@@ -1831,6 +1872,13 @@ class EntryDialog:
         self.note.insert("1.0", entry.get("note", ""))
         r += 1
 
+        def kind_fields(event=None):
+            key=next((key for key,name in reference_ui.KINDS.items() if tr(name)==self.kind.get()), 'website')
+            if not self.fields.get('1.0','end').strip():
+                self.fields.insert('1.0',format_fields([{'name':tr(n),'value':'','secret':s} for n,s in reference_ui.FIELDS.get(key,[])]))
+        self.kind_picker.bind('<<ComboboxSelected>>',kind_fields)
+        if is_new:kind_fields()
+
         btns = ttk.Frame(frm)
         btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(14, 0))
         midnight_button(btns, text=tr('Сохранить'), style="Accent.TButton", command=self._ok).pack(
@@ -1843,6 +1891,8 @@ class EntryDialog:
     def _apply_template(self, _=None):
         name=next((key for key in TEMPLATES if tr(key)==self.tpl.get()),self.tpl.get())
         tpl = TEMPLATES.get(name, {})
+        kind={'Сайт / сервис':'website','Банк / карта':'card','Лицензионный ключ':'application'}.get(name)
+        if kind:self.kind.set(tr(reference_ui.KINDS[kind]))
         if tpl.get("category") and not self.vars["category"].get().strip():
             self.vars["category"].set(tr(tpl["category"]))
         if tpl.get("fields") and not self.fields.get("1.0", "end").strip():
@@ -1879,6 +1929,7 @@ class EntryDialog:
                                        parent=self.top)
                 return
         self.result = {
+            "kind": next((key for key,name in reference_ui.KINDS.items() if tr(name)==self.kind.get()), 'website'),
             "title": title,
             "url": self.vars["url"].get().strip(),
             "login": self.vars["login"].get().strip(),
@@ -1999,8 +2050,8 @@ class SettingsDialog:
             ttk.Label(card,text=tr(text),style='Panel.TLabel',wraplength=500).pack(anchor='w',pady=(0,6))
         security=section('Блокировка и защита')
         label(security,'Блокировать после бездействия в приложении (минуты)')
-        ttk.Spinbox(security,from_=1,to=120,textvariable=self.idle,width=8).pack(anchor='w',pady=(0,8))
-        label(security,'Отсчёт начинается после последнего действия в Bitora. Допустимо от 1 до 120 минут.')
+        ttk.Spinbox(security,from_=0,to=1440,textvariable=self.idle,width=8).pack(anchor='w',pady=(0,8))
+        label(security,'0 — выключено; максимум 24 часа.')
         label(security,'Очищать буфер обмена через (сек)')
         ttk.Spinbox(security,from_=5,to=300,textvariable=self.clip,width=8).pack(anchor='w',pady=(0,8))
         for key,text in self.FLAGS:
@@ -2050,9 +2101,9 @@ class SettingsDialog:
         s = self.app.settings
         try:
             idle, clip = int(self.idle.get()), int(self.clip.get())
-            if not 1 <= idle <= 120 or not 5 <= clip <= 300: raise ValueError()
+            if not 0 <= idle <= 1440 or not 5 <= clip <= 300: raise ValueError()
         except Exception:
-            messagebox.showwarning(tr(APP_NAME), tr('Блокировка: от 1 до 120 минут. Буфер обмена: от 5 до 300 секунд.'), parent=self.top)
+            messagebox.showwarning(tr(APP_NAME), tr('Блокировка: 0–1440 минут. Буфер обмена: 5–300 секунд.'), parent=self.top)
             return
         hk = self.hotkey.get().strip()
         try:
@@ -2179,6 +2230,7 @@ class BreachDialog:
         self.bar.pack(fill="x", pady=10)
         self.q = queue.Queue()
         self.stop = threading.Event()
+        top.bind('<Destroy>',lambda event:self.stop.set() if event.widget is top else None,add='+')
         top.protocol("WM_DELETE_WINDOW", self._close)
         threading.Thread(target=self._work, daemon=True).start()
         self._poll()
@@ -2227,6 +2279,7 @@ class BreachDialog:
                 pass
 
     def _show(self, res):
+        studio_ui.remember_breaches(self.app,res)
         self.bar.pack_forget()
         bad = [(e, res.get(e["password"], 0)) for e in self.entries if res.get(e["password"], 0) > 0]
         if not bad:
@@ -2452,6 +2505,8 @@ class App:
         self.root.title(tr(APP_NAME))
         self.settings.apply_midnight_design()
         self.settings.apply_atelier_design()
+        self.settings.apply_mint_design()
+        self.settings.apply_studio_design()
         vp = self.settings.get("vault_path")
         self.vault = Vault(vp if vp else os.path.join(data_dir(), "vault.dat"))
         self.vault.backup_dir = os.path.join(data_dir(), "backups")
@@ -2505,6 +2560,9 @@ class App:
         font_size=max(9,min(14,int(self.settings.get("font_size") or 10)))
         def scaled_font(size):return max(8,round(size*font_size/10))
         name = self.settings.get("theme")
+        if name=='system':
+            from desktop_options import system_theme
+            name=system_theme()
         self.theme_name = name if name in THEMES else "dark"
         t = self.t = THEMES[self.theme_name]
         self.root._midnight_palette=t
@@ -3054,6 +3112,7 @@ class App:
             pass
 
     def lock(self):
+        self._breach_results={}
         self._undo_actions=[]
         for w in self.root.winfo_children():
             if w.winfo_class() == "Toplevel":
@@ -3308,13 +3367,22 @@ class App:
         if not compact:self.hello_status.pack(side="right",padx=12)
         ttk.Separator(f).pack(fill="x")
         shell=ttk.Frame(f);shell.pack(fill="both",expand=True)
-        rail_width=int((76 if compact else 208)*scale)
-        self.rail=ttk.Frame(shell,style="Side.TFrame",padding=(10,22))
-        self.rail.pack(side="left",fill="y")
+        rail_width=int((76 if compact else 238)*scale)
+        self.rail_scroll=reference_ui.ScrollArea(shell,dict(t,bg=t['side']),style='Side.TFrame')
+        self.rail_scroll.configure(width=rail_width+30)
+        self.rail_scroll.pack(side='left',fill='y')
+        self.rail_scroll.pack_propagate(False)
+        self.rail=self.rail_scroll.content
+        self.rail.configure(padding=(8,12))
         self.rail_buttons={}
-        for value,icon,label in (("all","key",tr("Все записи")),("fav","star",tr("Избранное")),("trash","trash",tr("Корзина"))):
-            btn=DesignButton(self.rail,label,lambda selected=value:self.set_library_filter(selected),t,
-                kind="rail",icon=icon,width=rail_width,height=58 if compact else 42,scale=scale,
+        navigation_items=[('home','home',tr('Главная')),('all','folder',tr('Все записи'))]
+        navigation_items += [('type:'+key,icon,tr(reference_ui.KINDS[key])) for key,icon in (
+            ('website','browser'),('application','application'),('card','card'),('file','document'),('document','document'),('address','address'),('note','note'),('passkey','key'))]
+        navigation_items += [('auth','lock',tr('Аутентификатор')),('audit','shield',tr('Проверка паролей'))]
+        navigation_items += [('fav','star',tr('Избранное')),('trash','trash',tr('Корзина'))]
+        for value,icon,label in navigation_items:
+            btn=DesignButton(self.rail,label,lambda selected=value:self.navigate_workspace(selected),t,
+                kind="rail",icon=icon,width=rail_width,height=44 if compact else 36,scale=scale,
                 font_size=9 if compact else font_size,vertical=compact,align="left")
             btn.pack(fill="x",pady=3);self.rail_buttons[value]=btn
         if compact:
@@ -3327,24 +3395,23 @@ class App:
             category_title.pack(side="left")
             category_title.bind("<Button-1>",lambda event:self.toggle_sidebar())
             IconButton(category_heading,tr("Управление категориями"),lambda:feature_dialogs.categories(self),dict(t,bg=t['side']),'plus',scale).pack(side="right")
-        DesignButton(self.rail,tr("Настройки"),lambda:SettingsDialog(self,self.root),t,kind="rail",icon="settings",
+        DesignButton(self.rail,tr("Настройки"),lambda:self.navigate_workspace('settings'),t,kind="rail",icon="settings",
             width=rail_width,height=58 if compact else 42,scale=scale,font_size=9 if compact else font_size,vertical=compact,align="left").pack(side="bottom",fill="x",pady=(16,0))
         self.password_health=None
-        if not compact:
-            self.password_health=PasswordHealth(self.rail,t,scale,tr("Аудит паролей"),tr("Добавьте первую запись"),self.audit)
-            self.password_health.pack(side="bottom",fill="x",padx=4,pady=(12,8))
+        DesignButton(self.rail,tr('Генератор паролей'),lambda:GeneratorDialog(self,self.root),t,kind='rail',icon='key',
+            width=rail_width,height=44 if compact else 36,scale=scale,font_size=9 if compact else font_size,vertical=compact,align='left').pack(fill='x',pady=(8,0))
         f=ttk.Frame(shell);f.pack(side="left",fill="both",expand=True)
-        self.atelier_hero=AtelierBackdrop(f,t,scale,compact=tight)
-        self.atelier_hero.pack(fill="x",padx=28,pady=(10,8) if tight else (22,18))
-        hero=self.atelier_hero.body
-        self.atelier_add=DesignButton(hero,tr("Новая запись"),self.add,dict(t,bg=t["panel"]),kind="primary",icon="plus",height=32 if tight else 42,scale=scale,font_size=font_size)
-        self.atelier_add.pack(side="right",padx=(18,0),pady=0 if tight else 18)
-        if not tight:ttk.Label(hero,text=tr("ЛИЧНОЕ ПРОСТРАНСТВО"),style="AtelierEyebrow.TLabel").pack(anchor="w",pady=(0,6))
-        self.atelier_title=ttk.Label(hero,text=tr("Ваше хранилище"),style="AtelierHero.TLabel")
-        if tight:self.atelier_title.configure(font=(FF,max(16,round(19*font_size/10))))
+        self.atelier_hero=ttk.Frame(f,style='Panel.TFrame',padding=(22,12))
+        self.atelier_hero.pack(fill='x')
+        hero=self.atelier_hero
+        toolbar=ttk.Frame(hero,style='Panel.TFrame')
+        self.atelier_add=DesignButton(toolbar,tr("Добавить"),self.add_menu,dict(t,bg=t["panel"]),kind="primary",icon="plus",width=int(145*scale),height=36,scale=scale,font_size=font_size)
+        self.atelier_add.pack(side="left",padx=(0,10))
+        IconButton(toolbar,tr('Управление категориями'),lambda:feature_dialogs.categories(self),dict(t,bg=t['panel']),'folder',scale).pack(side='left',padx=(0,12))
+        self.atelier_title=ttk.Label(hero,text=tr("Главная"),style="Section.TLabel")
         self.atelier_title.pack(anchor="w")
+        toolbar.pack(fill='x',pady=(10,0))
         self.atelier_subtitle=ttk.Label(hero,text=tr("Аккаунты, пароли и коды подтверждения."),style="AtelierSubtitle.TLabel")
-        if not tight:self.atelier_subtitle.pack(anchor="w",pady=(8,0))
         def fit_hero(event):
             available=max(90,event.width-self.atelier_add.winfo_reqwidth()-24)
             self.atelier_title.configure(wraplength=available)
@@ -3352,8 +3419,9 @@ class App:
         hero.bind("<Configure>",fit_hero)
         overview=ttk.Frame(f);self._build_stats(overview)
         self.search=tk.StringVar();self.search.trace_add("write",lambda *args:self.refresh_list())
-        self.atelier_search=SearchField(f,self.search,t,scale,font_size,tr("Найти запись…"))
-        self.atelier_search.pack(fill="x",padx=28,pady=(0,10))
+        self.atelier_search=SearchField(toolbar,self.search,dict(t,bg=t['panel']),scale,font_size,tr("Найти запись…"))
+        self.atelier_search.configure(width=int(260*scale))
+        self.atelier_search.pack(side='right',fill='x',expand=True,padx=(12,0))
         if tight:self.atelier_search.configure(height=int(38*scale))
         self.search_entry=self.atelier_search.entry
         controls=ttk.Frame(f,padding=(28,0));controls.pack(fill="x")
@@ -3380,6 +3448,7 @@ class App:
         self.side.bind("<<TreeviewSelect>>",self.on_side_select);self.side.bind("<Button-3>",self.category_menu)
         if compact:body.add(side_fr,text=tr("Разделы"))
         center = self.center_panel = ttk.Frame(body)
+        center.configure(width=int(270*scale))
         filter_bar=ttk.Frame(center,style="Panel.TFrame",padding=(16,10))
         self.filter_bar=filter_bar
         self.issue_choices={tr("Все записи"):None,tr("Слабые пароли"):ISSUE_WEAK,tr("Повторы паролей"):ISSUE_REUSED,tr("Устаревшие пароли"):ISSUE_OLD,tr("Без пароля"):ISSUE_EMPTY}
@@ -3433,7 +3502,7 @@ class App:
             body.add(center, text=tr('Записи'))
             body.select(center)
         else:
-            body.add(center, weight=1)
+            body.add(center, weight=0)
 
         det = self.detail_panel = ttk.Frame(body, width=400)
         detail_canvas = self.detail_canvas = tk.Canvas(det, bg=t["bg"], highlightthickness=0, width=400)
@@ -3445,8 +3514,11 @@ class App:
         detail_content = ttk.Frame(detail_surface.body, style="Panel.TFrame", padding=0)
         detail_content.pack(fill="x")
         detail_window = detail_canvas.create_window((0, 0), window=detail_surface, anchor="nw")
-        detail_canvas.bind("<Configure>", lambda event: detail_canvas.itemconfigure(
-            detail_window, width=event.width))
+        def arrange_details(event):
+            width=min(event.width,int(500*scale))
+            detail_canvas.itemconfigure(detail_window,width=width)
+            detail_canvas.coords(detail_window,max(0,(event.width-width)//2),16)
+        detail_canvas.bind("<Configure>",arrange_details)
         detail_content.bind("<Configure>", lambda event: detail_canvas.configure(
             scrollregion=detail_canvas.bbox("all")))
         detail_surface.bind("<Configure>",lambda event:detail_canvas.configure(scrollregion=detail_canvas.bbox("all")))
@@ -3477,7 +3549,29 @@ class App:
             r.after_cancel(self._totp_job)
         self._totp_tick()
         if compact or self.settings.get("sidebar_collapsed"): self.toggle_sidebar(persist=False)
+        reference_ui.install(self,f,controls,body,scale)
+        self.studio=studio_ui.Workspace(self,f)
+        self.studio.navigate('home')
         self.root.after(800,self.backup_reminder)
+
+    def navigate_workspace(self,value):
+        if hasattr(self,'studio') and self.studio.parent.winfo_exists():
+            if value not in ('home','settings','audit'):self.studio.clear_filter()
+            self.studio.navigate(value);return
+        if hasattr(self,'home_view') and self.home_view.winfo_exists():reference_ui.navigate(self,value)
+        else:self.set_library_filter(value)
+
+    def add_menu(self):
+        menu=self._menu()
+        for kind,label in reference_ui.KINDS.items():
+            menu.add_command(label=tr(label),command=lambda kind=kind:self.add_kind(kind))
+        menu.tk_popup(self.atelier_add.winfo_rootx(),self.atelier_add.winfo_rooty()+self.atelier_add.winfo_height())
+
+    def add_kind(self,kind):
+        if kind=='passkey':
+            messagebox.showinfo(APP_NAME,tr('Ключи доступа создаются на сайте через расширение Bitora. Включите «Ключи доступа Bitora» в расширении.'),parent=self.root)
+            return
+        self.add(kind)
 
     def notify(self,text,action=None,action_label=None):
         if not self.frame or not self.frame.winfo_exists():return
@@ -3951,6 +4045,7 @@ class App:
         self.refresh_sidebar()
         self.refresh_list()
         self.refresh_stats()
+        if hasattr(self,'home_view') and self.home_view.winfo_exists():self.home_view.refresh()
 
     def refresh_sidebar(self):
         v = self.vault
@@ -3984,13 +4079,18 @@ class App:
         if not getattr(self,'atelier_layout',False):
             ins("", "end", iid="h_sys", text=tr('   СИСТЕМА'), tags=("head",))
             ins("", "end", iid="trash", text=f"{tr('  ⌫   Корзина  (')}{len(v.trash())})")
-        if not self.side.exists(self.cat_filter) and self.cat_filter not in ('all','fav','trash'):
+        if not self.side.exists(self.cat_filter) and self.cat_filter not in ('all','fav','trash','auth') and not self.cat_filter.startswith('type:'):
             self.cat_filter = "all"
         self.side.selection_set((self.cat_filter,) if self.side.exists(self.cat_filter) else ())
         self.refresh_library_controls()
 
     def set_library_filter(self,value):
-        if not self.side.exists(value) and value not in ('all','fav','trash'):return
+        if not self.side.exists(value) and value not in ('all','fav','trash','auth') and not value.startswith('type:'):return
+        if getattr(self,'home_active',False):
+            self.home_active=False
+            self.home_scroll.pack_forget()
+            self.workspace_controls.pack(fill='x')
+            self.workspace_body.pack(fill='both',expand=True,padx=22,pady=(12,16))
         self.cat_filter=value
         self.side.selection_set((value,) if self.side.exists(value) else ())
         self.refresh_list();self.refresh_library_controls()
@@ -3999,16 +4099,22 @@ class App:
     def refresh_library_controls(self):
         if not hasattr(self,"library_picker") or not self.library_picker.winfo_exists():return
         self.library_choices={tr("Все категории"):"all",tr("Избранное"):"fav",tr("Без категории"):"uncat",tr("Корзина"):"trash"}
+        self.library_choices.update({tr(label):'type:'+key for key,label in reference_ui.KINDS.items()})
         self.library_choices.update({tr("Категория: ")+c:"cat:"+c for c in self.vault.categories()})
         tags=sorted({tag for entry in self.vault.active() for tag in split_tags(entry["tags"])})
         self.library_choices.update({tr("Тег: ")+tag:"tag:"+tag for tag in tags})
         self.library_picker.configure(values=list(self.library_choices))
         self.library_filter.set(next((label for label,value in self.library_choices.items() if value==self.cat_filter),tr("Все категории")))
-        counts={'all':len(self.vault.active()),'fav':sum(bool(e['favorite']) for e in self.vault.active()),'trash':len(self.vault.trash())}
+        counts={'all':len(self.vault.active()),'fav':sum(bool(e['favorite']) for e in self.vault.active()),'trash':len(self.vault.trash()),'auth':sum(bool(e['totp']) for e in self.vault.active())}
+        counts.update({'type:'+key:sum(reference_ui.entry_kind(e)==key for e in self.vault.active()) for key in reference_ui.KINDS})
+        workspace=getattr(self,'studio',None)
+        special=workspace.active if workspace and workspace.parent.winfo_exists() and workspace.active in ('audit','settings') else None
         for value,button in self.rail_buttons.items():
-            button.configure(style="RailActive.TButton" if value==self.cat_filter else "Rail.TButton",badge=str(counts[value]) if not self.compact and counts[value] else '')
+            active=special or ('home' if getattr(self,'home_active',False) else self.cat_filter)
+            button.configure(style="RailActive.TButton" if value==active else "Rail.TButton",badge=str(counts.get(value,0)) if not self.compact and value!='home' else '')
         if hasattr(self,'atelier_title'):
-            title={'all':tr('Ваше хранилище'),'fav':tr('Избранное'),'trash':tr('Корзина'),'uncat':tr('Без категории')}.get(self.cat_filter,self.cat_filter.partition(':')[2])
+            title=tr('Главная') if getattr(self,'home_active',False) else {'all':tr('Все записи'),'fav':tr('Избранное'),'trash':tr('Корзина'),'uncat':tr('Без категории')}.get(self.cat_filter,tr(reference_ui.KINDS.get(self.cat_filter.partition(':')[2],self.cat_filter.partition(':')[2])))
+            if special:title=tr('Настройки') if special=='settings' else tr('Проверка паролей')
             self.atelier_title.configure(text=title)
         self.refresh_category_chips()
 
@@ -4020,6 +4126,7 @@ class App:
             self.side.selection_set((self.cat_filter,) if self.side.exists(self.cat_filter) else ())
             return
         if sel[0] != self.cat_filter:
+            if getattr(self,'home_active',False):self.navigate_workspace(sel[0]);return
             self.cat_filter = sel[0]
             self.refresh_list();self.refresh_library_controls()
             if self.compact:self.body.select(self.center_panel)
@@ -4030,6 +4137,10 @@ class App:
             return bool(e["deleted"])
         if e["deleted"]:
             return False
+        if f=='auth':return bool(e['totp'])
+        if f=='type:file':return reference_ui.entry_kind(e)=='file' or bool(e.get('attachments'))
+        if f.startswith('type:'):
+            return reference_ui.entry_kind(e)==f[5:]
         if f == "all":
             return True
         if f == "fav":
@@ -4048,6 +4159,8 @@ class App:
         self.refresh_list()
 
     def refresh_list(self):
+        if getattr(self,'home_active',False) and hasattr(self,'home_view') and self.search.get().strip():
+            self.navigate_workspace('all')
         prev = self.tree.selection()
         q = self.search.get().strip()
         from product_features import matches_query
@@ -4064,6 +4177,10 @@ class App:
 
         items = [e for e in self.vault.entries if self._in_filter(e) and matches_query(e,q,search_issues)
                  and (chosen is None or e["id"] in issue_ids[chosen])]
+        studio=getattr(self,'studio',None)
+        if studio and studio.parent.winfo_exists() and studio.audit_filter:
+            allowed={e['id'] for e in studio_ui.password_groups(self)[1][studio.audit_filter]}
+            items=[e for e in items if e['id'] in allowed]
         items.sort(key=sk, reverse=rev)
         self.tree.delete(*self.tree.get_children())
         self.tree.tag_configure("alternate", background=self.t["card"])
@@ -4092,8 +4209,12 @@ class App:
             self.empty_lbl.config(text=msg)
             self.empty_lbl.place(relx=0.5, rely=0.38, anchor="center")
         self.show_details()
+        if studio and studio.parent.winfo_exists():studio.refresh()
 
     def goto_entry(self, entry_id):
+        if hasattr(self,'studio') and self.studio.parent.winfo_exists() and self.studio.active in ('audit','settings'):
+            self.navigate_workspace('all')
+        if getattr(self,'home_active',False):self.navigate_workspace('all')
         self.search.set("")
         e = self.vault.get(entry_id)
         if e and not self._in_filter(e):
@@ -4126,9 +4247,11 @@ class App:
         m.tk_popup(event.x_root, event.y_root)
 
     # ---------------- действия с записями
-    def add(self):
+    def add(self,kind=None):
         cat = self.cat_filter[4:] if self.cat_filter.startswith("cat:") else ""
-        d = EntryDialog(self, self.root, category=cat)
+        self._new_entry_kind=kind or (self.cat_filter[5:] if self.cat_filter.startswith('type:') else 'website')
+        try:d = EntryDialog(self, self.root, category=cat)
+        finally:self._new_entry_kind='website'
         if d.result:
             ok, e = self._do(self.vault.add, d.result)
             if ok:
@@ -4228,7 +4351,11 @@ class App:
         if urlparse(url).scheme not in ("http", "https"):
             messagebox.showwarning(tr(APP_NAME), tr('Открываются только ссылки http/https.'), parent=self.root)
             return
-        webbrowser.open(url)
+        try:
+            from desktop_options import open_site
+            open_site(url,self.settings.get('default_browser') or 'system')
+        except (ValueError,OSError) as exc:
+            messagebox.showwarning(APP_NAME,tr('Не удалось открыть выбранный браузер.'),parent=self.root)
 
     def show_history(self):
         e = self.selected()
@@ -4293,6 +4420,9 @@ class App:
                 messagebox.showerror(tr(APP_NAME), f"{tr('Ошибка: ')}{tr(str(ex))}", parent=self.root)
 
     def export_csv(self):
+        if any(e.get('passkey') for e in self.vault.active()):
+            messagebox.showinfo(APP_NAME,tr('Для переноса ключей доступа используйте зашифрованную резервную копию. CSV не поддерживает ключи доступа.'),parent=self.root)
+            return
         if not messagebox.askyesno(
                 tr(APP_NAME), tr('В CSV пароли будут записаны открытым текстом.\nЛюбой, кто получит файл, сможет их прочитать. Продолжить?'),
                 icon="warning", parent=self.root):

@@ -21,7 +21,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install cryptography pyinstaller pystray pillow openpyxl
+          pip install cryptography pyinstaller pystray pillow openpyxl fido2==2.2.1
       - name: Regression tests
         run: python -m unittest discover -s tests -v
       - name: Validate browser extension
@@ -38,6 +38,8 @@ jobs:
           node tools/test_browser_forms.cjs
           node tools/test_browser_advanced.cjs
           node tools/test_browser_status.cjs
+          $env:PYTHON_EXE = (Get-Command python).Source
+          node tools/test_passkey_browser.cjs
       - name: Build desktop Windows Hello helper
         shell: pwsh
         run: ./tools/build_hello.ps1
@@ -146,7 +148,7 @@ jobs:
             gh release upload $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip Bitora-password-Setup.exe Bitora-password-portable.zip Bitora-password-store-kit.zip dist/BUILD_MANIFEST.json --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed' }
           } else {
-            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip Bitora-password-Setup.exe Bitora-password-portable.zip Bitora-password-store-kit.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Bitora Paswword Manager $version" --notes-file RELEASE_NOTES.md
+            gh release create $tag installer_out/MoiParoli-Setup.exe MoiParoli-portable.zip MoiParoli-store-kit.zip Bitora-password-Setup.exe Bitora-password-portable.zip Bitora-password-store-kit.zip dist/BUILD_MANIFEST.json --target $env:GITHUB_SHA --title "Bitora Password Manager $version" --notes-file RELEASE_NOTES.md
             if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
           }
 
