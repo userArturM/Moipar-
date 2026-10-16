@@ -119,7 +119,9 @@ with tempfile.TemporaryDirectory() as tmp:
     probe = Vault(str(data / "vault.dat"))
     probe.unlock("UpgradeTestOnly!789")
     assert probe.get(record["id"])["login"] == "test@example.com"
-    assert Settings(str(data / "settings.json")).get("theme") == "dark"
+    migrated_settings = Settings(str(data / "settings.json"))
+    assert migrated_settings.get("theme") == "light", 'First launch did not apply the selected Pearl Blue theme'
+    assert migrated_settings.get("design_version") == "pearl-blue", 'Pearl Blue migration was not recorded'
     assert hello.read_bytes()==before['hello_credential.json'], 'Upgrade changed Windows Hello credential data'
     print("Upgrade baseline:", "4.1 installer" if previous.is_file() else "same-version reinstall")
 print("Installer smoke checks passed: install, application startup, uninstall, user data preserved")
