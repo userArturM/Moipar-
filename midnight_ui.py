@@ -117,6 +117,12 @@ def line_icon(canvas,name,x,y,size,color,width=1.6):
     elif name=='filter':line(3,6,21,6);line(6,12,18,12);line(9,18,15,18)
     elif name=='sort':line(5,4,5,20,2,17);line(5,20,8,17);line(12,5,21,5);line(12,12,18,12);line(12,19,15,19)
     elif name=='lock':rect(5,10,19,22);line(8,10,8,6,10,3,14,3,16,6,16,10)
+    elif name=='grid':
+        for xx,yy in ((3,3),(14,3),(3,14),(14,14)):rect(xx,yy,xx+7,yy+7)
+    elif name=='list':
+        for yy in (5,12,19):line(4,yy,20,yy)
+    elif name=='account':oval(4,3,20,19);oval(9,6,15,12);line(6,18,8,14,16,14,18,18)
+    elif name=='refresh':line(20,8,20,3,15,3);line(20,6,15,2,7,3,3,9,4,17,10,21,18,19,21,14)
     elif name=='more':
         for xx in (5,12,19):canvas.create_oval(*p(xx-1,11),*p(xx+1,13),fill=color,outline='')
 
@@ -148,8 +154,8 @@ class DesignButton(tk.Canvas):
 
     def _surface_fill(self):
         t=self.palette
-        fill=(t['accent_hi'] if self.hover else t['accent']) if self.kind=='primary' else t['sel'] if self.selected else t['hover'] if self.hover else self.parent_bg
-        return blend(fill,t['accent_fg'] if self.kind=='primary' else t['accent'],.10) if self._pressed else fill
+        fill=(t.get('primary_hi',t['accent_hi']) if self.hover else t.get('primary',t['accent'])) if self.kind=='primary' else t['sel'] if self.selected else t['hover'] if self.hover else blend(self.parent_bg,t['fg'],.055) if self.kind=='secondary' else self.parent_bg
+        return blend(fill,t.get('primary_fg',t['accent_fg']) if self.kind=='primary' else t['accent'],.10) if self._pressed else fill
 
     def _animate_surface(self):
         if self._fade_id:self._motion_root.after_cancel(self._fade_id);self._fade_id=None
@@ -212,9 +218,9 @@ class DesignButton(tk.Canvas):
         primary=self.kind=='primary'
         fill=self._transition_fill or self._surface_fill()
         self._paint_fill=fill
-        color=t['muted'] if self.disabled else t['accent_fg'] if primary else t['accent'] if self.selected or self.kind=='text' else t['muted'] if self.kind=='rail' else t['fg']
+        color=t['muted'] if self.disabled else t.get('primary_fg',t['accent_fg']) if primary else t['accent'] if self.selected or self.kind=='text' else t['fg']
         border=t['accent'] if self.focus_get() is self else '' if self.kind in ('rail','chip','text') else t['border'] if not primary else t['accent']
-        rounded(self,1,1,w-2,h-2,9*s,fill,border)
+        rounded(self,1,1,w-2,h-2,(5 if self.kind=='rail' else 7)*s,fill,border)
         if self.vertical:
             if self.icon:line_icon(self,self.icon,w/2-9*s,8*s,18*s,color,1.7*s)
             label=self.label
@@ -368,9 +374,9 @@ class RecordList(tk.Canvas):
     def __init__(self,parent,model,vault,palette,scale,font_size,edit,delete,context,copy_login,copy_password):
         super().__init__(parent,background=palette['bg'],highlightthickness=0,borderwidth=0,takefocus=True)
         self.model=model;model.view=self;self.vault=vault;self.palette=palette;self.scale=scale
-        self.row_height=int(84*scale);self.ids=[];self.anchor=None;self.drawn=[]
+        self.row_height=int(62*scale);self.ids=[];self.anchor=None;self.drawn=[]
         self.hover_id=None
-        self.title_font=tkfont.Font(self,family='Segoe UI',size=font_size+1)
+        self.title_font=tkfont.Font(self,family='Segoe UI',size=font_size,weight="bold")
         self.sub_font=tkfont.Font(self,family='Segoe UI',size=max(9,font_size-1))
         self.avatar_font=tkfont.Font(self,family='Segoe UI',size=font_size+3)
         self.bind('<Configure>',lambda e:self.draw())
@@ -428,11 +434,11 @@ class RecordList(tk.Canvas):
             elif item==self.hover_id:rounded(self,1,y+2*s,w-3,self.row_height-4*s,10*s,t['hover'])
             if active:rounded(self,3*s,y+24*s,3*s,30*s,1.5*s,t['accent'])
             avatar_bg,avatar_fg=monogram_colors(entry['title'],t)
-            rounded(self,13*s,y+20*s,42*s,42*s,13*s,avatar_bg)
-            self.create_text(34*s,y+41*s,text=(entry['title'].strip()[:1] or '?').upper(),font=self.avatar_font,fill=avatar_fg)
-            left=70*s;space=max(30,w-left-38*s)
-            self.create_text(left,y+29*s,anchor='w',text=self.shorten(entry['title'],self.title_font,space),font=self.title_font,fill=t['fg'])
-            self.create_text(left,y+52*s,anchor='w',text=self.shorten(entry['login'] or entry['url'],self.sub_font,space),font=self.sub_font,fill=t['muted'])
+            rounded(self,13*s,y+18*s,23*s,23*s,6*s,avatar_bg)
+            self.create_text(24*s,y+30*s,text=(entry['title'].strip()[:1] or '?').upper(),font=self.avatar_font,fill=avatar_fg)
+            left=47*s;space=max(30,w-left-38*s)
+            self.create_text(left,y+23*s,anchor='w',text=self.shorten(entry['title'],self.title_font,space),font=self.title_font,fill=t['fg'])
+            self.create_text(left,y+41*s,anchor='w',text=self.shorten(entry['url'] or entry['login'],self.sub_font,space),font=self.sub_font,fill=t['muted'])
             if entry['favorite']:line_icon(self,'star',w-28*s,y+30*s,14*s,t['accent'],1.2*s)
             self.drawn.append(item)
         if self.focus_get() is self and self.ids:

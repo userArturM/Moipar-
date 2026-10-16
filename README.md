@@ -1,4 +1,4 @@
-# Bitora Password Manager 4.10.0
+# Bitora Password Manager 4.11.0
 
 ## Studio: оформление и новые возможности
 

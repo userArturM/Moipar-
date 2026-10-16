@@ -38,7 +38,7 @@ class MintDesktop(unittest.TestCase):
     cleanup_root=test_gui.DesktopTests.cleanup_root
 
     def test_button_motion_finishes_and_destroy_cancels_callbacks(self):
-        button=self.app.rail_buttons['fav']
+        button=self.app.rail_buttons['home']
         button._hover(True)
         self.assertIsNotNone(button._fade_id)
         done=m.tk.BooleanVar(value=False)

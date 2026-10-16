@@ -799,5 +799,8 @@
   "Системный браузер": "System browser",
   "Яндекс Браузер": "Yandex Browser",
   "Браузер для открытия сайтов": "Browser for opening websites",
-  "Не удалось открыть выбранный браузер.": "Could not open the selected browser."
+  "Не удалось открыть выбранный браузер.": "Could not open the selected browser.",
+  "Аккаунты": "Accounts",
+  "Перейти на сайт": "Go to website",
+  "Меню приложения": "Application menu"
 }

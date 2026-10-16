@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from localization import tr
 from midnight_ui import button, IconButton, DesignButton, blend
 from reference_ui import ScrollArea, entry_kind
+from design_surfaces import Surface, AuditTile
 
 
 def password_groups(app):
@@ -40,7 +41,8 @@ def remember_breaches(app, results):
 def text(parent,value,app,size=10,muted=False):
     from moi_paroli import FF
     w=ttk.Label(parent,text=value,style='Muted.TLabel' if muted else 'Panel.TLabel',
-                font=(FF,size,'bold' if size>=12 else 'normal'))
+                font=(FF,size,'bold' if size>=12 else 'normal'),
+                background=ttk.Style(parent).lookup(parent.cget('style') or 'TFrame','background'))
     w.pack(anchor='w',pady=(0,8))
     w.bind('<Configure>',lambda e:w.configure(wraplength=max(80,parent.winfo_width()-40)))
     return w
@@ -50,12 +52,12 @@ class Cards(ScrollArea):
     def __init__(self,app,parent):
         super().__init__(parent,app.t)
         self.app=app;self.ids=[];self.limit=48;self.columns=0;self.tiles=[]
-        self.content.configure(padding=(20,12))
+        self.content.configure(padding=(10,8))
         self.content.bind('<Configure>',self.reflow,add='+')
 
     def reflow(self,event=None):
         scale=max(1,float(self.tk.call('tk','scaling'))/(96/72))
-        columns=max(1,min(6,int((self.canvas.winfo_width()-28)/(210*scale))))
+        columns=max(1,min(6,int((self.canvas.winfo_width()-20)/(210*scale))))
         if columns==self.columns:return
         self.columns=columns
         for col in range(6):self.content.columnconfigure(col,weight=1 if col<columns else 0,uniform='tiles' if col<columns else '')
@@ -63,6 +65,12 @@ class Cards(ScrollArea):
         if hasattr(self,'more') and self.more.winfo_exists():self.more.grid(row=(len(self.tiles)+columns-1)//columns,column=0,columnspan=columns,pady=12)
 
     def refresh(self,reset=True):
+        if getattr(self,'_rendering',False):return
+        self._rendering=True
+        try:self.render(reset)
+        finally:self._rendering=False
+
+    def render(self,reset=True):
         a=self.app
         self.ids=list(a.tree.get_children())
         if reset:self.limit=48
@@ -72,15 +80,28 @@ class Cards(ScrollArea):
         for eid in self.ids[:self.limit]:
             row=a.vault.get(eid)
             if not row:continue
-            tile=ttk.Frame(self.content,style='Panel.TFrame',padding=16,relief='solid',borderwidth=1)
-            self.tiles.append(tile)
+            surface=Surface(self.content,a.t,height=244+max(0,int(a.settings.get('font_size') or 10)-10)*22)
+            tile=surface.body
+            self.tiles.append(surface)
             header=ttk.Frame(tile,style='Panel.TFrame');header.pack(fill='x')
-            label=ttk.Label(header,text=row['title'],style='Section.TLabel',wraplength=160)
-            label.pack(side='left',fill='x',expand=True)
+            from midnight_ui import monogram_colors, rounded
+            bg,fg=monogram_colors(row['title'],a.t)
+            mark=tk.Canvas(header,width=26,height=28,bg=a.t['panel'],highlightthickness=0)
+            mark.pack(side='left',padx=(0,7))
+            rounded(mark,1,2,23,23,6,bg)
+            mark.create_text(12,13,text=(row['title'] or 'B')[0].upper(),fill=fg,font=('Segoe UI',10,'bold'))
+            more=IconButton(header,tr('Меню'),lambda eid=eid:self.context(eid),dict(a.t,bg=a.t['panel']),'more',.7)
+            more.pack(side='right')
             star=IconButton(header,tr('Избранное'),lambda eid=eid:self.favorite(eid),dict(a.t,bg=a.t['panel']),'star',.85)
             star.selected=bool(row['favorite'])
             star.pack(side='right')
-            text(tile,row.get('url','') or tr('Запись в хранилище'),a,muted=True)
+            label=ttk.Label(header,text=row['title'][:24]+('…' if len(row['title'])>24 else ''),style='Panel.TLabel',wraplength=120,font=('Segoe UI',9,'bold'),cursor='hand2')
+            label.pack(side='left',fill='x',expand=True)
+            label.bind('<Button-1>',lambda e,eid=eid:self.open(eid))
+            mark.bind('<Button-1>',lambda e,eid=eid:self.open(eid))
+            url=row.get('url','') or tr('Запись в хранилище')
+            ttk.Label(tile,text=url[:37]+('…' if len(url)>37 else ''),style='Muted.TLabel',foreground=a.t['accent']).pack(anchor='w',pady=(2,10))
+            ttk.Separator(tile).pack(fill='x',pady=(0,12))
             if row.get('login'):self.field(tile,tr('Логин'),row['login'])
             if a.cat_filter=='auth' and row.get('totp'):self.totp(tile,eid)
             elif row.get('password'):self.password(tile,eid)
@@ -89,9 +110,9 @@ class Cards(ScrollArea):
                 text(tile,tr('Поля и вложения зашифрованы'),a,muted=True)
             weak=bool(row.get('password')) and row['id'] in weak_ids
             if weak:ttk.Label(tile,text=tr('Слабый пароль'),style='Panel.TLabel',foreground=a.t['bad']).pack(anchor='w',pady=6)
-            actions=ttk.Frame(tile,style='Panel.TFrame');actions.pack(fill='x',pady=(10,0))
-            button(actions,text=tr('Открыть'),command=lambda eid=eid:self.open(eid)).pack(side='left')
-            if row.get('url'):button(actions,text=tr('На сайт'),command=lambda eid=eid:self.site(eid)).pack(side='right')
+            actions=ttk.Frame(tile,style='Panel.TFrame');actions.pack(side='bottom',fill='x',pady=(10,0))
+            if row.get('url'):button(actions,text=tr('Перейти на сайт'),command=lambda eid=eid:self.site(eid)).pack(anchor='center')
+            else:button(actions,text=tr('Открыть'),command=lambda eid=eid:self.open(eid)).pack(anchor='center')
         if not self.tiles:
             text(self.content,tr('В этом разделе пока нет записей'),a,muted=True)
             if a.cat_filter=='type:passkey':
@@ -103,19 +124,31 @@ class Cards(ScrollArea):
 
     def load_more(self):self.limit+=48;self.refresh(False)
 
+    def context(self,eid):
+        a=self.app
+        menu=a._menu()
+        menu.add_command(label=tr('Открыть'),command=lambda:self.open(eid))
+        def edit():
+            a.tree.selection_set(eid);a.edit()
+        menu.add_command(label=tr('Изменить'),command=edit)
+        menu.add_command(label=tr('Копировать логин'),command=lambda:self.copy(eid,'login'))
+        menu.add_command(label=tr('Копировать пароль'),command=lambda:self.copy(eid,'password'))
+        menu.add_separator()
+        menu.add_command(label=tr('Избранное'),command=lambda:self.favorite(eid))
+        try:menu.tk_popup(self.winfo_pointerx(),self.winfo_pointery())
+        finally:menu.grab_release()
+
     def field(self,parent,title,value):
         a=self.app
         box=ttk.Frame(parent,style='Card.TFrame',padding=(10,8));box.pack(fill='x',pady=4)
-        ttk.Label(box,text=title,style='CardMuted.TLabel').pack(anchor='w')
         line=ttk.Frame(box,style='Card.TFrame');line.pack(fill='x')
-        shown=ttk.Label(line,text=value,style='Card.TLabel',wraplength=160);shown.pack(side='left',fill='x',expand=True)
+        shown=ttk.Label(line,text=value[:28]+('…' if len(value)>28 else ''),style='CardMono.TLabel');shown.pack(side='left',fill='x',expand=True)
         IconButton(line,tr('Копировать'),lambda:a.copy_text(value,title),dict(a.t,bg=a.t['card']),'copy',.85).pack(side='right')
         return shown,line
 
     def password(self,parent,eid):
         a=self.app
         box=ttk.Frame(parent,style='Card.TFrame',padding=(10,8));box.pack(fill='x',pady=4)
-        ttk.Label(box,text=tr('Пароль'),style='CardMuted.TLabel').pack(anchor='w')
         line=ttk.Frame(box,style='Card.TFrame');line.pack(fill='x')
         value=ttk.Label(line,text='••••••••••',style='CardMono.TLabel',wraplength=160);value.pack(side='left',fill='x',expand=True)
         state={'visible':False,'job':None}
@@ -182,30 +215,43 @@ class Cards(ScrollArea):
 class Audit(ScrollArea):
     def __init__(self,app,parent):
         super().__init__(parent,app.t);self.app=app
-        self.content.configure(padding=22)
+        self.content.configure(padding=(18,16))
+        self.column=ttk.Frame(self.content);self.column.pack(anchor='nw',fill='x')
+        self.canvas.bind('<Configure>',self.fit_column,add='+')
+
+    def fit_column(self,event=None):
+        scale=max(1,float(self.tk.call('tk','scaling'))/(96/72))
+        self.canvas.itemconfigure(self.window,width=min(int(780*scale),max(80,self.canvas.winfo_width())))
 
     def refresh(self):
         a=self.app
-        for child in self.content.winfo_children():child.destroy()
-        info=ttk.Frame(self.content,style='Panel.TFrame',padding=22);info.pack(fill='x',pady=(0,18))
+        for child in self.column.winfo_children():child.destroy()
+        info=ttk.Frame(self.column,style='Panel.TFrame',padding=22);info.pack(fill='x',pady=(0,18))
+        from midnight_ui import line_icon, rounded
+        if not a.compact:
+            illustration=tk.Canvas(info,width=112,height=112,bg=a.t['panel'],highlightthickness=0)
+            illustration.pack(side='right',padx=(20,0))
+            illustration.create_oval(12,12,100,100,fill=blend(a.t['panel'],a.t['accent'],.12),outline='')
+            rounded(illustration,29,20,60,76,12,blend(a.t['panel'],a.t['accent'],.3))
+            line_icon(illustration,'shield',42,35,37,a.t['accent'],2)
+            for x in (31,48,65,82):line_icon(illustration,'key',x,86,12,a.t['accent'],1)
+        info_text=ttk.Frame(info,style='Panel.TFrame');info_text.pack(side='left',fill='both',expand=True)
+        info=info_text
         text(info,tr('Что нужно знать о безопасности паролей'),a,14)
         text(info,tr('Используйте сложные и уникальные пароли. Проверяйте утечки и меняйте обнаруженные пароли.'),a,muted=True)
         button(info,text=tr('Проверить утечки…'),command=self.check).pack(anchor='w')
         rows,groups=password_groups(a)
-        text(self.content,tr('Всего паролей')+': '+str(len(rows)),a,15)
+        text(self.column,tr('Всего паролей')+': '+str(len(rows)),a,15)
         for key,title,caption,color in (
             ('breached','Скомпрометированы','Эти пароли найдены в базе утечек. Смените их.',a.t['bad']),
             ('weak','Слабые','Эти пароли слишком простые. Создайте более сложные.',a.t['warn']),
             ('strong','Сильные','Сложные, уникальные пароли с выполненной проверкой утечек.',a.t['good']),
             ('unchecked','Не проверены','Для этих паролей ещё нет актуального результата проверки утечек.',a.t['muted']),
             ('reused','Повторяющиеся','Одинаковые пароли используются в нескольких записях.',a.t['warn'])):
-            panel=ttk.Frame(self.content,style='Panel.TFrame',padding=(18,16));panel.pack(fill='x',pady=6)
-            stripe=tk.Frame(panel,bg=color,width=4);stripe.pack(side='left',fill='y',padx=(0,16))
-            inner=ttk.Frame(panel,style='Panel.TFrame');inner.pack(side='left',fill='x',expand=True)
-            text(inner,str(len(groups[key]))+'  '+tr(title),a,15)
-            text(inner,tr(caption),a,muted=True)
-            button(panel,text=tr('Открыть'),command=lambda group=key:self.show_group(group)).pack(side='right',padx=8)
-        text(self.content,tr('Группы могут пересекаться. Результаты проверки утечек действуют только в текущем сеансе.'),a,muted=True)
+            panel=AuditTile(self.column,a.t,len(groups[key]),tr(title),tr(caption),color,lambda group=key:self.show_group(group))
+            panel.pack(fill='x',pady=6)
+        text(self.column,tr('Группы могут пересекаться. Результаты проверки утечек действуют только в текущем сеансе.'),a,muted=True)
+        self.fit_column()
 
     def check(self):self.app.check_breaches();self.refresh()
 
@@ -219,22 +265,31 @@ class Preferences(ttk.Frame):
     PAGES=('Общие','Браузеры','Игнорируемые сайты','Импорт и экспорт','Дополнительно','Подключение')
     def __init__(self,app,parent):
         super().__init__(parent);self.app=app;self.vars={};self.page='Общие'
-        nav=ttk.Frame(self,style='Side.TFrame',padding=12)
+        nav=ttk.Frame(self,style='Panel.TFrame',padding=12)
         nav.pack(side='top' if app.compact else 'left',fill='x' if app.compact else 'y')
         self.area=ScrollArea(self,app.t);self.area.pack(side='left',fill='both',expand=True)
+        from ambient_ui import attach
+        attach(self.area.canvas,app)
+        scale=max(1,float(self.tk.call('tk','scaling'))/(96/72))
+        self.area.canvas.bind('<Configure>',lambda e:self.area.canvas.itemconfigure(self.area.window,width=min(e.width,int(740*scale))))
+        self.page_buttons={}
         if app.compact:
             choice=tk.StringVar(value=tr(self.page))
             picker=ttk.Combobox(nav,textvariable=choice,values=[tr(p) for p in self.PAGES],state='readonly')
             picker.pack(fill='x');picker.bind('<<ComboboxSelected>>',lambda e:self.show(next(p for p in self.PAGES if tr(p)==choice.get())))
         else:
             for page in self.PAGES:
-                button(nav,text=tr(page),command=lambda page=page:self.show(page)).pack(fill='x',pady=4)
+                item=DesignButton(nav,tr(page),lambda page=page:self.show(page),dict(app.t,side=app.t['panel']),kind='rail',width=int(210*scale),height=42,scale=scale,align='left')
+                item.pack(fill='x',pady=3);self.page_buttons[page]=item
+        from command_window import open_commands
+        button(nav,text=tr('Меню приложения'),command=lambda:open_commands(app)).pack(fill='x',pady=(18,4))
         self.show(self.page)
 
     def section(self,title):
         a=self.app
-        card=ttk.Frame(self.area.content,style='Panel.TFrame',padding=20);card.pack(fill='x',padx=20,pady=(8,8))
+        card=ttk.Frame(self.area.content,padding=(24,18));card.pack(fill='x')
         text(card,tr(title),a,13)
+        ttk.Separator(self.area.content).pack(fill='x',padx=24)
         return card
 
     def check(self,parent,key,title):
@@ -249,6 +304,7 @@ class Preferences(ttk.Frame):
 
     def show(self,page):
         self.page=page;self.vars={};a=self.app
+        for name,item in self.page_buttons.items():item.configure(style='RailActive.TButton' if name==page else 'Rail.TButton')
         for child in self.area.content.winfo_children():child.destroy()
         self.area.canvas.yview_moveto(0)
         if page=='Общие':
@@ -348,25 +404,62 @@ class Workspace:
         self.app=app;self.parent=parent;self.active='home';self.audit_filter=None
         self.cards=Cards(app,parent);self.audit=Audit(app,parent);self.preferences=None
         self.toolbar=ttk.Frame(app.atelier_search.master,style='Panel.TFrame')
-        self.toolbar.pack(side='left',padx=8)
+        self.toolbar.pack(side='right',padx=8)
+        self.layout_buttons={}
         for mode,label in (('list','Список'),('cards','Карточки')):
-            button(self.toolbar,text=tr(label),command=lambda mode=mode:self.set_layout(mode)).pack(side='left',padx=3)
+            item=IconButton(self.toolbar,tr(label),lambda mode=mode:self.set_layout(mode),dict(app.t,bg=app.t['panel']),'list' if mode=='list' else 'grid')
+            item.pack(side='left',padx=2);self.layout_buttons[mode]=item
+        self.collection=ttk.Frame(app.atelier_search.master,style='Panel.TFrame')
+        self.collection.pack(side='left',fill='x',expand=True,padx=6)
+        segment=ttk.Frame(self.collection,style='Panel.TFrame');segment.pack(anchor='center')
+        self.collection_buttons={}
+        for value,label,icon in (('all','Все записи','grid'),('fav','Избранное','star')):
+            item=DesignButton(segment,tr(label),lambda value=value:app.navigate_workspace(value),dict(app.t,bg=app.t['panel']),kind='chip',icon=icon,height=30,font_size=9)
+            item.pack(side='left',padx=2);self.collection_buttons[value]=item
         self.refresh_job=None
+        self.transition_job=None;self.transition_surface=None
         def dispose(event):
-            if event.widget is parent and self.refresh_job:app.root.after_cancel(self.refresh_job);self.refresh_job=None
+            if event.widget is parent:
+                if self.refresh_job:app.root.after_cancel(self.refresh_job);self.refresh_job=None
+                self.stop_transition()
         parent.bind('<Destroy>',dispose,add='+')
+
+    def stop_transition(self):
+        if self.transition_job:self.app.root.after_cancel(self.transition_job);self.transition_job=None
+        surface=self.transition_surface
+        if surface is not None and surface.winfo_exists() and surface.winfo_manager()=='pack':
+            surface.pack_configure(pady=(1,0) if surface is self.app.workspace_body else 0)
+        self.transition_surface=None
+
+    def transition(self,surface):
+        self.stop_transition()
+        if not self.app.settings.get('animations'):return
+        self.transition_surface=surface
+        final=1 if surface is self.app.workspace_body else 0
+        def frame(index):
+            self.transition_job=None
+            if not surface.winfo_exists() or surface.winfo_manager()!='pack':return
+            surface.pack_configure(pady=(final+round(8*(1-index/8)**3),0))
+            if index<8:self.transition_job=self.app.root.after(20,lambda:frame(index+1))
+            else:self.transition_surface=None
+        frame(0)
 
     def set_layout(self,mode):
         self.app.settings.set('record_layout',mode);self.navigate(self.app.cat_filter)
 
     def navigate(self,value):
         a=self.app
+        previous=self.active
+        self.stop_transition()
+        if self.refresh_job:a.root.after_cancel(self.refresh_job);self.refresh_job=None
+        for mode,item in self.layout_buttons.items():item.configure(style='RailActive.TButton' if a.settings.get('record_layout')==mode else 'Rail.TButton')
+        for key,item in self.collection_buttons.items():item.configure(style='RailActive.TButton' if key==('fav' if value=='fav' else 'all') else 'Rail.TButton')
         for surface in (a.home_scroll,a.workspace_body,a.workspace_controls,self.cards,self.audit,self.preferences):
             if surface is not None and surface.winfo_exists():surface.pack_forget()
         self.active=value
         a.home_active=value=='home'
         if value=='home':
-            a.home_scroll.pack(fill='both',expand=True);a.home_view.refresh();a.search.set('')
+            a.home_scroll.pack(fill='both',expand=True);a.home_view.refresh();a.search.set('');a.atelier_title.configure(text=tr('Главная'))
         elif value=='audit':
             self.audit.pack(fill='both',expand=True);self.audit.refresh();a.atelier_title.configure(text=tr('Проверка паролей'))
         elif value=='settings':
@@ -377,10 +470,16 @@ class Workspace:
             a.workspace_controls.pack(fill='x')
             if a.settings.get('record_layout')=='cards':
                 a.workspace_body.pack_forget();self.cards.pack(fill='both',expand=True);self.cards.refresh()
-            else:a.workspace_body.pack(fill='both',expand=True,padx=22,pady=(12,16))
-        if value in ('home','audit','settings'):self.toolbar.pack_forget()
-        elif not self.toolbar.winfo_manager():self.toolbar.pack(side='left',padx=8)
+            else:a.workspace_body.pack(fill='both',expand=True,padx=0,pady=(1,0))
+        if value in ('home','audit','settings'):
+            self.toolbar.pack_forget();self.collection.pack_forget()
+        else:
+            if not self.toolbar.winfo_manager():self.toolbar.pack(side='right',padx=8)
+            if not self.collection.winfo_manager():self.collection.pack(side='left',fill='x',expand=True,padx=6)
         for key,item in a.rail_buttons.items():item.configure(style='RailActive.TButton' if key==value else 'Rail.TButton')
+        if previous!=value:
+            surface=a.home_scroll if value=='home' else self.audit if value=='audit' else self.preferences if value=='settings' else self.cards if a.settings.get('record_layout')=='cards' else a.workspace_body
+            self.transition(surface)
 
     def refresh(self):
         if self.active in ('home','settings'):return

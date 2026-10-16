@@ -324,7 +324,7 @@ def handle(msg, selector=select_record, saver=save_record):
         try:return approve(msg['action'].partition('_')[2],msg.get('options'))
         except PasskeyError as exc:return {'ok':False,'name':exc.name,'error':str(exc)}
     if msg.get("action")=="ping":
-        return {"ok":True,"version":"4.10.0","supports":["get_credentials","save_credentials","passkey_create","passkey_get"]}
+        return {"ok":True,"version":"4.11.0","supports":["get_credentials","save_credentials","passkey_create","passkey_get"]}
     if msg.get("action")=="save_credentials":
         try:
             host,candidate=candidate_from_message(msg)

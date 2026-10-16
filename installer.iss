@@ -1,6 +1,6 @@
 ﻿#define MyAppName "Bitora Password Manager"
 #define MyAppExe "MoiParoli.exe"
-#define MyAppVersion "4.10.0"
+#define MyAppVersion "4.11.0"
 
 [Setup]
 AppId={{B7E1C0A2-6D54-4C57-9A3E-5F2D1A9C7E31}

@@ -12,6 +12,79 @@ class StudioTests(unittest.TestCase):
     setUp=test_gui.DesktopTests.setUp
     cleanup_root=test_gui.DesktopTests.cleanup_root
 
+    def test_fast_navigation_cancels_old_transition_and_respects_motion_setting(self):
+        studio=self.app.studio
+        self.app.navigate_workspace('audit');old=studio.transition_job
+        self.assertIsNotNone(old)
+        self.app.navigate_workspace('home')
+        self.assertNotIn(old,self.app.root.tk.call('after','info'))
+        self.app.settings.set('animations',False)
+        self.app.navigate_workspace('settings');self.assertIsNone(studio.transition_job)
+
+    def test_pearl_migration_preserves_data_paths_and_later_theme_choice(self):
+        original={key:self.app.settings.get(key) for key in ('vault_path','keyfile_path','language','idle_minutes','clipboard_seconds')}
+        self.app.settings.data['design_version']='studio'
+        self.assertTrue(self.app.settings.apply_pearl_design())
+        self.assertEqual(self.app.settings.get('theme'),'light')
+        for key,value in original.items():self.assertEqual(self.app.settings.get(key),value)
+        self.app.settings.set('theme','dark')
+        for migrate in (self.app.settings.apply_midnight_design,self.app.settings.apply_atelier_design,self.app.settings.apply_mint_design,self.app.settings.apply_studio_design,self.app.settings.apply_pearl_design):
+            self.assertFalse(migrate())
+        self.assertEqual(self.app.settings.get('theme'),'dark')
+
+    def test_card_hover_timer_is_cancelled_when_collection_is_rebuilt(self):
+        self.app.vault.add(dict(title='Synthetic hover',login='fake@example.test'))
+        self.app.refresh_all();self.app.studio.set_layout('cards');self.app.root.update()
+        tile=self.app.studio.cards.tiles[0]
+        tile.hover(True);self.assertIsNotNone(tile.motion_job)
+        self.app.studio.cards.refresh();self.app.root.update()
+        self.assertIsNone(tile.motion_job)
+
+    def test_compact_navigation_fits_and_short_sidebar_does_not_overscroll(self):
+        for percent in (100,200):
+            self.app.root.tk.call('tk','scaling',percent/100*96/72)
+            self.app.root.geometry('1440x900');self.app.apply_theme();self.app.show_main();self.app.root.update()
+            rail=self.app.rail_scroll
+            for item in self.app.rail_buttons.values():
+                self.assertLessEqual(item.winfo_y()+item.winfo_height(),rail.canvas.winfo_height()+2)
+            if rail.content.winfo_reqheight()<=rail.canvas.winfo_height():
+                rail.canvas.event_generate('<MouseWheel>',delta=-120);self.app.root.update()
+                self.assertEqual(rail.canvas.yview()[0],0)
+
+    def test_background_motion_respects_setting_and_destroy(self):
+        effect=self.app.ambient_band._ambient
+        self.app.root.update();effect.resume()
+        self.assertIsNotNone(effect.job)
+        effect.pause();self.assertIsNone(effect.job)
+        self.app.settings.set('animations',False);effect.resume()
+        self.assertIsNone(effect.job)
+        self.app.ambient_band.destroy();self.assertIsNone(effect.job)
+
+    def test_separate_command_window_reuses_commands_and_closes_after_lock(self):
+        from command_window import open_commands
+        self.app.navigate_workspace('settings')
+        top=open_commands(self.app);self.app.root.update()
+        self.assertIs(open_commands(self.app),top)
+        found=[]
+        def visit(widget):
+            for child in widget.winfo_children():
+                if isinstance(child,m.DesignButton) and child.cget('text')==m.tr('Заблокировать'):found.append(child)
+                visit(child)
+        visit(top)
+        self.assertEqual(len(found),1)
+        found[0].invoke();self.app.root.update()
+        self.assertFalse(self.app.vault.unlocked)
+        self.assertFalse(top.winfo_exists())
+
+    def test_accounts_navigation_contains_websites_and_apps_only(self):
+        expected=[]
+        for kind in ('website','application','note','card'):
+            row=self.app.vault.add(dict(title=kind,kind=kind,login='synthetic@example.test'))
+            if kind in ('website','application'):expected.append(row['id'])
+        self.app.navigate_workspace('accounts');self.app.root.update()
+        self.assertEqual(set(self.app.tree.get_children()),set(expected))
+        self.assertEqual(self.app.atelier_title.cget('text'),m.tr('Аккаунты'))
+
     def test_cards_list_audit_and_preferences_share_real_navigation(self):
         row=self.app.vault.add(dict(title='Fixture',login='fake@example.test',url='https://example.test',password='SyntheticOnly!2026'))
         self.app.refresh_all();self.app.studio.set_layout('cards');self.app.root.update()

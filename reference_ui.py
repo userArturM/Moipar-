@@ -47,17 +47,20 @@ class ScrollArea(ttk.Frame):
     def __init__(self, parent, palette, style='TFrame'):
         super().__init__(parent, style=style)
         self.canvas=tk.Canvas(self,bg=palette['bg'],highlightthickness=0,width=1)
-        scroll=ttk.Scrollbar(self,orient='vertical',command=self.canvas.yview)
+        scroll=self.scroll=ttk.Scrollbar(self,orient='vertical',command=self.canvas.yview)
         scroll.pack(side='right',fill='y');self.canvas.pack(side='left',fill='both',expand=True)
         self.canvas.configure(yscrollcommand=scroll.set)
         self.content=ttk.Frame(self.canvas,style=style)
         self.window=self.canvas.create_window(0,0,window=self.content,anchor='nw')
         self.canvas.bind('<Configure>',lambda e:self.canvas.itemconfigure(self.window,width=e.width))
-        self.content.bind('<Configure>',lambda e:self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.content.bind('<Configure>',lambda e:self.canvas.configure(scrollregion=self.canvas.bbox(self.window)))
         root=self.winfo_toplevel()
         def wheel(event):
             if str(event.widget).startswith(str(self)):
-                self.canvas.yview_scroll(-int(event.delta/120),'units');return 'break'
+                bounds=self.canvas.bbox(self.window)
+                if not bounds or bounds[3]-bounds[1]<=self.canvas.winfo_height():self.canvas.yview_moveto(0)
+                else:self.canvas.yview_scroll(-int(event.delta/120),'units')
+                return 'break'
         def focus(event):
             w=event.widget
             if str(w).startswith(str(self.content)):
@@ -108,7 +111,13 @@ class Home(ttk.Frame):
         return b
 
     def reflow(self, event=None):
-        columns = 2 if self.winfo_width() >= 680 else 1
+        scale=max(1,float(self.tk.call('tk','scaling'))/(96/72))
+        columns = 2 if self.winfo_width() >= 680*scale else 1
+        if hasattr(self,'metric_cells'):
+            metric_columns=4 if self.winfo_width()>=640*scale else 2
+            for index,cell in enumerate(self.metric_cells):
+                cell.grid(row=index//metric_columns,column=index%metric_columns,sticky='nw',pady=4)
+            for column in range(4):self.metrics.columnconfigure(column,weight=1 if column<metric_columns else 0)
         if self.columns == columns:
             return
         self.columns = columns
@@ -141,22 +150,25 @@ class Home(ttk.Frame):
             for entry in records:
                 row = ttk.Frame(card, style='Panel.TFrame'); row.pack(fill='x', pady=3)
                 button = self.button(row, entry['title'], lambda eid=entry['id']: a.goto_entry(eid))
+                button.kind='text'
                 button.align='left'
                 button.configure(icon={'website':'browser','application':'application','card':'card','document':'document','address':'address','note':'note','file':'document','passkey':'key'}[entry_kind(entry)])
                 button.pack_configure(fill='x')
                 # Titles only: the overview never reveals logins, passwords or card numbers.
         for child in self.health.winfo_children(): child.destroy()
         self.label(self.health, tr('Состояние паролей'), size=15)
-        metrics = ttk.Frame(self.health, style='Panel.TFrame'); metrics.pack(fill='x')
+        metrics = self.metrics = ttk.Frame(self.health, style='Panel.TFrame'); metrics.pack(fill='x')
+        self.metric_cells=[]
         for col, (key, title, color) in enumerate((('total', 'Всего паролей', 'fg'),
                 ('strong', 'Сильные', 'good'), ('weak', 'Слабые', 'bad'), ('reused', 'Повторяются', 'warn'))):
             cell = ttk.Frame(metrics, style='Panel.TFrame', padding=(0, 4, 12, 4))
+            self.metric_cells.append(cell)
             cell.grid(row=0, column=col, sticky='nw'); metrics.columnconfigure(col, weight=1)
             self.label(cell, str(data[key]), size=23, color=a.t[color])
             self.label(cell, tr(title), muted=True)
         self.label(self.health, tr('Утечки: проверка ещё не выполнена. Группы могут пересекаться.'), muted=True)
         actions = ttk.Frame(self.health, style='Panel.TFrame'); actions.pack(fill='x')
-        self.button(actions, tr('Подробнее'), a.audit).pack_configure(side='left', padx=(0, 12))
+        self.button(actions, tr('Подробнее'), lambda:a.navigate_workspace('audit')).pack_configure(side='left', padx=(0, 12))
         self.button(actions, tr('Проверить утечки…'), lambda: BreachDialog(a, a.root)).pack_configure(side='left')
         for child in self.tips.winfo_children(): child.destroy()
         self.label(self.tips, tr('Полезные возможности'), size=15)
@@ -167,7 +179,7 @@ class Home(ttk.Frame):
         self.label(browser, tr('Установите расширение и проверьте подключение к Bitora.'), muted=True,surface='card')
         self.button(browser, tr('Расширение и браузеры'), lambda: BrowserDialog(a, a.root), primary=True)
         self.label(settings, tr('Быстрый вход и автоматическая блокировка'), size=12,surface='card')
-        self.button(settings, tr('Перейти в настройки'), lambda: SettingsDialog(a, a.root))
+        self.button(settings, tr('Перейти в настройки'), lambda:a.navigate_workspace('settings'))
         self.columns=None
         self.reflow()
 

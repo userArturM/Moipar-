@@ -132,7 +132,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_midnight_navigation_and_category_picker(self):
         self.assertEqual(self.app.root.title(),'Bitora Password Manager')
-        self.assertEqual(self.app.theme_name,'dark')
+        self.assertEqual(self.app.theme_name,'light')
         self.assertTrue(self.app._sidebar_hidden)
         self.assertEqual(tuple(self.app.tree.cget('displaycolumns')),('fav','title','login'))
         row=self.app.vault.add({'title':'Work item','category':'Work','password':'FakeOnly!789'})
@@ -153,7 +153,7 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(self.app._sidebar_hidden)
         self.assertEqual(self.app.side_panel.master,self.app.rail)
         self.assertEqual(len(self.app.body.panes()),2)
-        self.assertEqual(self.app.atelier_header.master,self.app.frame)
+        self.assertEqual(self.app.atelier_header.master,self.app.rail)
         self.app.navigate_workspace('all');self.app.root.update()
         self.assertLess(self.app.search_entry.winfo_rooty(),self.app.category_chips.winfo_rooty())
         self.assertNotIn('all',self.app.side.get_children())
